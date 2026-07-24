@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lingle на сервере</title>
+    <style>
+        body { background: #121212; color: white; font-family: Arial, sans-serif; display: flex; justify-content: center; height: 100vh; margin: 0; }
+        #chat-container { width: 400px; height: 600px; background: #1e1e1e; border-radius: 16px; display: flex; flex-direction: column; margin-top: 20px; }
+        #header { padding: 15px; background: #2d2d2d; text-align: center; font-weight: bold; font-size: 1.2rem; }
+        #messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; }
+        .msg { padding: 8px 14px; border-radius: 18px; margin-bottom: 8px; max-width: 80%; }
+        .msg.self { background: #007bff; align-self: flex-end; color: white; }
+        .msg.other { background: #333; align-self: flex-start; }
+        #input-area { display: flex; padding: 10px; background: #2d2d2d; gap: 10px; }
+        input, button { padding: 10px; border-radius: 20px; border: none; }
+        input { flex: 1; background: #3d3d3d; color: white; }
+        button { background: #007bff; color: white; cursor: pointer; font-weight: bold; }
+        #username { width: 80px; flex: none; }
+    </style>
+</head>
+<body>
+<div id="chat-container">
+    <div id="header">🌀 Lingle (серверная версия)</div>
+    <div id="messages"></div>
+    <div id="input-area">
+        <input type="text" id="username" placeholder="Имя" value="Гость">
+        <input type="text" id="msgInput" placeholder="Сообщение...">
+        <button id="sendBtn">➤</button>
+    </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const messagesDiv = document.getElementById('messages');
+    const msgInput = document.getElementById('msgInput');
+    const usernameInput = document.getElementById('username');
+    const sendBtn = document.getElementById('sendBtn');
+
+    socket.on('load_history', (msgs) => msgs.forEach(addMessage));
+    socket.on('receive_message', addMessage);
+
+    function addMessage(msg) {
+        const div = document.createElement('div');
+        div.className = `msg ${msg.id === socket.id ? 'self' : 'other'}`;
+        div.innerHTML = `<b>${msg.username}</b> ${msg.time}<br>${msg.text}`;
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    sendBtn.onclick = () => {
+        const text = msgInput.value.trim();
+        if (!text) return;
+        socket.emit('send_message', { username: usernameInput.value, text });
+        msgInput.value = '';
+    };
+    msgInput.onkeypress = (e) => { if (e.key === 'Enter') sendBtn.onclick(); };
+</script>
+</body>
+</html>
