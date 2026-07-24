@@ -1,7 +1,7 @@
- const express = require('express');
+const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -14,81 +14,89 @@ app.use(express.json());
 
 const SECRET_KEY = 'lingle_secret_2026';
 
-// Подключаемся к SQLite (файл создастся сам в папке сервера)
-const db = new sqlite3.Database('./db.sqlite');
+// Подключаемся к SQLite (файл db.sqlite создастся сам)
+const db = new Database('db.sqlite');
 
-// Создаём таблицы
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
+// Создаём таблицы (синхронно, это работает быстрее для мелких проектов)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS rooms (
+  );
+  CREATE TABLE IF NOT EXISTS rooms (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS room_messages (
+  );
+  CREATE TABLE IF NOT EXISTS room_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     room_id INTEGER,
     user_id INTEGER,
     username TEXT NOT NULL,
     text TEXT NOT NULL,
     time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`);
-});
+  );
+`);
 
-// --- АУТЕНТИФИКАЦИЯ ---
+// --- РЕГИСТРАЦИЯ И ВХОД ---
 app.post('/api/register', (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: 'Заполните все поля' });
 
-  db.get('SELECT id FROM users WHERE email = ? OR username = ?', [email, username], async (err, row) => {
-    if (row) return res.status(409).json({ error: 'Почта или имя уже заняты' });
+  try {
+    const existing = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
+    if (existing) return res.status(409).json({ error: 'Почта или имя уже заняты' });
 
-    const hash = await bcrypt.hash(password, 10);
-    db.run('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)', [username, email, hash], function(err) {
-      if (err) return res.status(500).json({ error: 'Ошибка регистрации' });
-      const token = jwt.sign({ userId: this.lastID, username: username }, SECRET_KEY, { expiresIn: '7d' });
-      res.json({ token, user: { id: this.lastID, username, email } });
-    });
-  });
+    const hash = bcrypt.hashSync(password, 10);
+    const info = db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)').run(username, email, hash);
+    
+    const token = jwt.sign({ userId: info.lastInsertRowid, username: username }, SECRET_KEY, { expiresIn: '7d' });
+    res.json({ token, user: { id: info.lastInsertRowid, username, email } });
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка регистрации' });
+  }
 });
 
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Введите почту и пароль' });
 
-  db.get('SELECT id, username, password_hash FROM users WHERE email = ?', [email], async (err, user) => {
+  try {
+    const user = db.prepare('SELECT id, username, password_hash FROM users WHERE email = ?').get(email);
     if (!user) return res.status(401).json({ error: 'Неверная почта или пароль' });
 
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = bcrypt.compareSync(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Неверная почта или пароль' });
 
     const token = jwt.sign({ userId: user.id, username: user.username }, SECRET_KEY, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, username: user.username, email } });
-  });
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка входа' });
+  }
 });
 
 app.get('/api/rooms', (req, res) => {
-  db.all('SELECT id, name FROM rooms ORDER BY id ASC', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Ошибка загрузки' });
+  try {
+    const rows = db.prepare('SELECT id, name FROM rooms ORDER BY id ASC').all();
     res.json(rows);
-  });
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка загрузки' });
+  }
 });
 
 app.post('/api/rooms', (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Введите название' });
-  db.run('INSERT INTO rooms (name) VALUES (?)', [name], function(err) {
-    if (err) return res.status(500).json({ error: 'Ошибка создания комнаты' });
-    res.json({ id: this.lastID, name });
-  });
+
+  try {
+    const info = db.prepare('INSERT INTO rooms (name) VALUES (?)').run(name);
+    res.json({ id: info.lastInsertRowid, name });
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка создания комнаты' });
+  }
 });
 
 // --- СОКЕТЫ (ЧАТ + ЗВОНКИ) ---
@@ -116,29 +124,22 @@ io.on('connection', (socket) => {
     currentRoomId = roomId;
     socket.join(`room_${roomId}`);
 
-    db.all('SELECT * FROM room_messages WHERE room_id = ? ORDER BY time ASC LIMIT 50', [roomId], (err, rows) => {
-      if (!err) socket.emit('load_history', rows);
-    });
+    const rows = db.prepare('SELECT * FROM room_messages WHERE room_id = ? ORDER BY time ASC LIMIT 50').all(roomId);
+    socket.emit('load_history', rows);
   });
 
   socket.on('send_message', (data) => {
     const { roomId, text } = data;
     if (!roomId || !text) return;
 
-    db.run('INSERT INTO room_messages (room_id, user_id, username, text) VALUES (?, ?, ?, ?)', [roomId, currentUserId, currentUsername, text], function(err) {
-      if (err) return;
-      const savedMsg = { id: this.lastID, room_id: roomId, user_id: currentUserId, username: currentUsername, text: text, time: new Date() };
-      io.to(`room_${roomId}`).emit('receive_message', savedMsg);
-    });
+    const info = db.prepare('INSERT INTO room_messages (room_id, user_id, username, text) VALUES (?, ?, ?, ?)').run(roomId, currentUserId, currentUsername, text);
+    const savedMsg = { id: info.lastInsertRowid, room_id: roomId, user_id: currentUserId, username: currentUsername, text: text, time: new Date() };
+    io.to(`room_${roomId}`).emit('receive_message', savedMsg);
   });
 
-  // WEBRTC ЗВОНКИ
+  // ЗВОНКИ (WEBRTC)
   socket.on('call_user', (data) => {
-    socket.to(`room_${data.targetRoomId}`).emit('incoming_call', {
-      from: socket.id,
-      fromUsername: currentUsername,
-      offer: data.offer
-    });
+    socket.to(`room_${data.targetRoomId}`).emit('incoming_call', { from: socket.id, fromUsername: currentUsername, offer: data.offer });
   });
 
   socket.on('answer_call', (data) => {
@@ -155,4 +156,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('✅ Lingle на SQLite с регистрацией и звонками!'));
+server.listen(PORT, () => console.log('✅ Lingle на better-sqlite3 готов!'));
