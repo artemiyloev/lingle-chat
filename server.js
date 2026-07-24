@@ -4,6 +4,9 @@ const socketIo = require('socket.io');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,10 +17,28 @@ app.use(express.json());
 
 const SECRET_KEY = 'lingle_secret_2026';
 
-// Подключаемся к SQLite (файл db.sqlite создастся сам)
+// Настройка загрузки файлов
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = './uploads';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+const upload = multer({ storage });
+app.post('/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+  res.json({ filename: req.file.filename, originalname: req.file.originalname, url: `/uploads/${req.file.filename}` });
+});
+app.use('/uploads', express.static('uploads'));
+
+// Подключаем SQLite
 const db = new Database('db.sqlite');
 
-// Создаём таблицы (синхронно, это работает быстрее для мелких проектов)
+// Создаём таблицы
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,11 +58,12 @@ db.exec(`
     user_id INTEGER,
     username TEXT NOT NULL,
     text TEXT NOT NULL,
+    file TEXT,            -- ссылка на файл, если есть
     time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 `);
 
-// --- РЕГИСТРАЦИЯ И ВХОД ---
+// --- Регистрация / вход ---
 app.post('/api/register', (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: 'Заполните все поля' });
@@ -52,8 +74,7 @@ app.post('/api/register', (req, res) => {
 
     const hash = bcrypt.hashSync(password, 10);
     const info = db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)').run(username, email, hash);
-    
-    const token = jwt.sign({ userId: info.lastInsertRowid, username: username }, SECRET_KEY, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: info.lastInsertRowid, username }, SECRET_KEY, { expiresIn: '7d' });
     res.json({ token, user: { id: info.lastInsertRowid, username, email } });
   } catch (err) {
     res.status(500).json({ error: 'Ошибка регистрации' });
@@ -67,10 +88,8 @@ app.post('/api/login', (req, res) => {
   try {
     const user = db.prepare('SELECT id, username, password_hash FROM users WHERE email = ?').get(email);
     if (!user) return res.status(401).json({ error: 'Неверная почта или пароль' });
-
     const valid = bcrypt.compareSync(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Неверная почта или пароль' });
-
     const token = jwt.sign({ userId: user.id, username: user.username }, SECRET_KEY, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, username: user.username, email } });
   } catch (err) {
@@ -90,7 +109,6 @@ app.get('/api/rooms', (req, res) => {
 app.post('/api/rooms', (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Введите название' });
-
   try {
     const info = db.prepare('INSERT INTO rooms (name) VALUES (?)').run(name);
     res.json({ id: info.lastInsertRowid, name });
@@ -99,7 +117,7 @@ app.post('/api/rooms', (req, res) => {
   }
 });
 
-// --- СОКЕТЫ (ЧАТ + ЗВОНКИ) ---
+// --- Сокеты (чат + голосовые сообщения) ---
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) { socket.isGuest = true; return next(); }
@@ -123,37 +141,30 @@ io.on('connection', (socket) => {
     if (currentRoomId) socket.leave(`room_${currentRoomId}`);
     currentRoomId = roomId;
     socket.join(`room_${roomId}`);
-
     const rows = db.prepare('SELECT * FROM room_messages WHERE room_id = ? ORDER BY time ASC LIMIT 50').all(roomId);
     socket.emit('load_history', rows);
   });
 
   socket.on('send_message', (data) => {
-    const { roomId, text } = data;
-    if (!roomId || !text) return;
+    const { roomId, text, file } = data;
+    if (!roomId) return;
 
-    const info = db.prepare('INSERT INTO room_messages (room_id, user_id, username, text) VALUES (?, ?, ?, ?)').run(roomId, currentUserId, currentUsername, text);
-    const savedMsg = { id: info.lastInsertRowid, room_id: roomId, user_id: currentUserId, username: currentUsername, text: text, time: new Date() };
+    const stmt = db.prepare('INSERT INTO room_messages (room_id, user_id, username, text, file) VALUES (?, ?, ?, ?, ?)');
+    const info = stmt.run(roomId, currentUserId, currentUsername, text || '', file || null);
+    const savedMsg = {
+      id: info.lastInsertRowid,
+      room_id: roomId,
+      user_id: currentUserId,
+      username: currentUsername,
+      text: text || '',
+      file: file || null,
+      time: new Date()
+    };
     io.to(`room_${roomId}`).emit('receive_message', savedMsg);
   });
 
-  // ЗВОНКИ (WEBRTC)
-  socket.on('call_user', (data) => {
-    socket.to(`room_${data.targetRoomId}`).emit('incoming_call', { from: socket.id, fromUsername: currentUsername, offer: data.offer });
-  });
-
-  socket.on('answer_call', (data) => {
-    io.to(data.targetId).emit('call_answered', { answer: data.answer, from: socket.id });
-  });
-
-  socket.on('ice_candidate', (data) => {
-    io.to(data.targetId).emit('ice_candidate', data.candidate);
-  });
-
-  socket.on('hangup', (data) => {
-    socket.to(`room_${data.roomId}`).emit('call_ended');
-  });
+  // (Звонки убираем — они всё равно не работают на Render)
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('✅ Lingle на better-sqlite3 готов!'));
+server.listen(PORT, () => console.log('✅ Lingle с голосовыми сообщениями!'));
