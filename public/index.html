@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lingle</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, sans-serif; }
+        body { background: #0b1416; color: #fff; display: flex; justify-content: center; height: 100vh; margin: 0; }
+        #app { width: 100%; max-width: 500px; height: 100vh; background: #0b1416; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+        
+        /* Экран входа */
+        #auth-container { display: flex; flex: 1; flex-direction: column; justify-content: center; align-items: center; padding: 30px; }
+        #auth-box { width: 100%; max-width: 350px; background: #1e2a2e; padding: 30px; border-radius: 16px; display: flex; flex-direction: column; gap: 15px; }
+        #auth-box h2 { text-align: center; margin-bottom: 10px; }
+        #auth-box input { background: #2a3942; border: none; padding: 12px; border-radius: 8px; color: #fff; font-size: 16px; width: 100%; outline: none; }
+        #auth-box button { background: #4caf50; border: none; padding: 12px; border-radius: 8px; color: #fff; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; }
+        #auth-box .error { color: #ff4d4d; text-align: center; font-size: 14px; margin-top: -10px; }
+        
+        /* Чат */
+        #chat-container { display: none; flex: 1; flex-direction: column; }
+        #header { padding: 10px 15px; background: #1e2a2e; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a3942; }
+        #header-left { display: flex; align-items: center; gap: 10px; }
+        #header-left .title { font-weight: 600; font-size: 18px; }
+        #header-left .subtitle { font-size: 13px; color: #8696a0; }
+        #header-right { display: flex; align-items: center; gap: 8px; }
+        #header-right select { background: #2a3942; color: #fff; border: none; padding: 6px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; outline: none; }
+        #header-right button { background: transparent; border: none; color: #fff; font-size: 20px; padding: 5px; cursor: pointer; }
+        #messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        .msg { display: flex; width: 100%; margin-bottom: 4px; }
+        .msg-content { max-width: 80%; padding: 8px 12px; border-radius: 8px; position: relative; word-wrap: break-word; }
+        .msg.self { justify-content: flex-end; }
+        .msg.self .msg-content { background: #4caf50; color: #fff; border-top-right-radius: 0; }
+        .msg.other { justify-content: flex-start; }
+        .msg.other .msg-content { background: #2a3942; color: #fff; border-top-left-radius: 0; }
+        .msg .username { font-weight: bold; font-size: 13px; color: #4caf50; display: block; margin-bottom: 2px; }
+        .msg .text { font-size: 15px; line-height: 1.4; }
+        .msg .time { font-size: 11px; color: #8696a0; float: right; margin-top: 4px; margin-left: 8px; }
+        
+        /* Поле ввода */
+        #input-area { display: flex; padding: 10px 15px; background: #1e2a2e; gap: 10px; align-items: center; border-top: 1px solid #2a3942; }
+        #msgInput { flex: 1; background: #2a3942; border: none; padding: 10px 15px; border-radius: 20px; color: #fff; outline: none; font-size: 15px; }
+        #sendBtn { background: #4caf50; border: none; width: 45px; height: 45px; border-radius: 50%; color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        
+        /* Окно звонка */
+        #call-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 20; justify-content: center; align-items: center; flex-direction: column; }
+        #call-box { background: #1a1a1a; width: 90%; max-width: 400px; border-radius: 24px; padding: 20px; text-align: center; display: flex; flex-direction: column; gap: 10px; position: relative; }
+        #call-box video { width: 100%; max-height: 200px; background: #000; border-radius: 12px; object-fit: cover; }
+        #call-box #local-video { width: 100px; height: 80px; position: absolute; bottom: 80px; right: 20px; border: 2px solid #4caf50; z-index: 21; border-radius: 12px; }
+        #call-box .call-info { font-size: 18px; font-weight: 600; }
+        #call-box .call-buttons { display: flex; gap: 16px; justify-content: center; }
+        #call-box .call-buttons button { padding: 14px 24px; border: none; border-radius: 50%; font-size: 24px; cursor: pointer; }
+        #call-box .btn-end { background: #e74c3c; color: #fff; }
+        #call-box .btn-answer { background: #4caf50; color: #fff; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!-- Вход -->
+    <div id="auth-container">
+        <div id="auth-box">
+            <h2 data-i18n="welcome">Lingle</h2>
+            <input type="email" id="auth-email" placeholder="Email">
+            <input type="password" id="auth-password" placeholder="Пароль">
+            <div class="error" id="auth-error"></div>
+            <button data-i18n="login" id="auth-btn">Войти</button>
+        </div>
+    </div>
+
+    <!-- Чат -->
+    <div id="chat-container">
+        <div id="header">
+            <div id="header-left">
+                <div>
+                    <div class="title">Lingle</div>
+                    <div class="subtitle" id="online-status">Вы вошли</div>
+                </div>
+            </div>
+            <div id="header-right">
+                <select id="lang-select">
+                    <option value="ru">Русский</option>
+                    <option value="en">English</option>
+                    <option value="zh">中文</option>
+                    <option value="de">Deutsch</option>
+                    <option value="ja">日本語</option>
+                    <option value="kk">Қазақша</option>
+                    <option value="pl">Polski</option>
+                    <option value="es">Español</option>
+                    <option value="it">Italiano</option>
+                    <option value="fr">Français</option>
+                    <option value="sl">Slovenščina</option>
+                    <option value="sk">Slovenčina</option>
+                    <option value="be">Беларуская</option>
+                    <option value="ar">العربية</option>
+                    <option value="tr">Türkçe</option>
+                    <option value="pt">Português</option>
+                    <option value="el">Ελληνικά</option>
+                    <option value="is">Íslenska</option>
+                    <option value="ga">Gaeilge</option>
+                    <option value="ko">한국어</option>
+                </select>
+                <button id="audio-call-btn" title="Аудиозвонок">🎧</button>
+                <button id="video-call-btn" title="Видеозвонок">📹</button>
+            </div>
+        </div>
+        <div id="messages"></div>
+        <div id="input-area">
+            <input type="text" id="msgInput" placeholder="Сообщение...">
+            <button id="sendBtn">➤</button>
+        </div>
+    </div>
+
+    <!-- Окно звонка -->
+    <div id="call-overlay">
+        <div id="call-box">
+            <video id="remote-video" autoplay playsinline></video>
+            <video id="local-video" autoplay playsinline muted></video>
+            <div class="call-info" id="call-status">Звонок...</div>
+            <div class="call-buttons">
+                <button id="call-end-btn" class="btn-end">📞</button>
+                <button id="call-answer-btn" class="btn-answer" style="display:none;">✅</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    // --- Языки ---
+    let currentLang = 'ru';
+    loadLanguage(currentLang);
+    document.getElementById('lang-select').addEventListener('change', function() {
+        currentLang = this.value;
+        loadLanguage(currentLang);
+    });
+    function loadLanguage(lang) {
+        const script = document.createElement('script');
+        script.src = `/lang-${lang}.js`;
+        script.onload = function() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (LANG[key]) el.textContent = LANG[key];
+            });
+        };
+        document.head.appendChild(script);
+    }
+
+    // --- Авторизация ---
+    const authContainer = document.getElementById('auth-container');
+    const chatContainer = document.getElementById('chat-container');
+    const authEmail = document.getElementById('auth-email');
+    const authPassword = document.getElementById('auth-password');
+    const authBtn = document.getElementById('auth-btn');
+    const authError = document.getElementById('auth-error');
+    let socket = null;
+
+    authBtn.onclick = async () => {
+        const email = authEmail.value.trim();
+        const password = authPassword.value.trim();
+        if (!email || !password) return authError.textContent = 'Заполните поля!';
+        const res = await fetch('/api/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) return authError.textContent = data.error || 'Ошибка входа';
+        localStorage.setItem('token', data.token);
+        startApp();
+    };
+
+    function startApp() {
+        authContainer.style.display = 'none';
+        chatContainer.style.display = 'flex';
+        const token = localStorage.getItem('token');
+        socket = io({ auth: { token } });
+        socket.emit('join_room', 1);
+        socket.on('load_history', msgs => msgs.forEach(addMessage));
+        socket.on('receive_message', addMessage);
+        initWebRTC();
+    }
+
+    function addMessage(msg) {
+        const div = document.createElement('div');
+        div.className = `msg ${socket && msg.user_id === socket.userId ? 'self' : 'other'}`;
+        let timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        div.innerHTML = `<div class="msg-content"><span class="username">${msg.username}</span><div class="text">${msg.text}</div><span class="time">${timeStr}</span></div>`;
+        document.getElementById('messages').appendChild(div);
+        document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+
+    document.getElementById('sendBtn').onclick = () => {
+        const text = document.getElementById('msgInput').value.trim();
+        if (!text || !socket) return;
+        socket.emit('send_message', { roomId: 1, text });
+        document.getElementById('msgInput').value = '';
+    };
+    document.getElementById('msgInput').onkeypress = (e) => { if (e.key === 'Enter') document.getElementById('sendBtn').click(); };
+
+    // --- Звонки (WebRTC) ---
+    let pc = null, localStream = null, remoteSocketId = null, isCaller = false;
+    const callOverlay = document.getElementById('call-overlay');
+    const callStatus = document.getElementById('call-status');
+    const localVideo = document.getElementById('local-video');
+    const remoteVideo = document.getElementById('remote-video');
+    const callEndBtn = document.getElementById('call-end-btn');
+    const callAnswerBtn = document.getElementById('call-answer-btn');
+
+    function initWebRTC() {
+        socket.on('incoming_call', (data) => {
+            callOverlay.style.display = 'flex';
+            callStatus.textContent = 'Входящий звонок';
+            callAnswerBtn.style.display = 'inline-block';
+            remoteSocketId = data.from;
+            window.pendingOffer = data.offer;
+        });
+        socket.on('call_answered', (data) => {
+            pc.setRemoteDescription(data.answer).then(() => { callStatus.textContent = 'Разговор идёт...'; });
+        });
+        socket.on('ice_candidate', (candidate) => { if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate)); });
+        socket.on('call_ended', () => { endCall(); alert('Звонок завершён'); });
+    }
+
+    function initiateCall(useVideo) {
+        if (!socket) return;
+        isCaller = true;
+        callOverlay.style.display = 'flex';
+        callStatus.textContent = 'Исходящий звонок...';
+        callAnswerBtn.style.display = 'none';
+        navigator.mediaDevices.getUserMedia({ audio: true, video: useVideo })
+            .then(stream => {
+                localStream = stream; localVideo.srcObject = stream;
+                localVideo.style.display = useVideo ? 'block' : 'none';
+                pc = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+                    ]
+                });
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+                pc.onicecandidate = (e) => {
+                    if (e.candidate && remoteSocketId) socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate });
+                };
+                pc.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
+                pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
+                    socket.emit('call_user', { targetRoomId: 1, offer: pc.localDescription });
+                });
+            }).catch(err => { alert('Нет доступа к камере/микрофону'); endCall(); });
+    }
+
+    callAnswerBtn.onclick = () => {
+        callAnswerBtn.style.display = 'none';
+        callStatus.textContent = 'Соединение...';
+        navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+            .then(stream => {
+                localStream = stream; localVideo.srcObject = stream; localVideo.style.display = 'block';
+                pc = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+                    ]
+                });
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+                pc.onicecandidate = (e) => {
+                    if (e.candidate && remoteSocketId) socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate });
+                };
+                pc.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
+                pc.setRemoteDescription(window.pendingOffer).then(() => pc.createAnswer()).then(answer => pc.setLocalDescription(answer)).then(() => {
+                    socket.emit('answer_call', { targetId: remoteSocketId, answer: pc.localDescription });
+                    callStatus.textContent = 'Разговор идёт...';
+                });
+            }).catch(err => { alert('Ошибка'); endCall(); });
+    };
+
+    document.getElementById('audio-call-btn').onclick = () => initiateCall(false);
+    document.getElementById('video-call-btn').onclick = () => initiateCall(true);
+
+    function endCall() {
+        if (pc) { pc.close(); pc = null; }
+        if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+        callOverlay.style.display = 'none';
+        localVideo.srcObject = null; remoteVideo.srcObject = null;
+        if (socket) socket.emit('hangup', { roomId: 1 });
+    }
+    callEndBtn.onclick = endCall;
+</script>
+</body>
+</html>
