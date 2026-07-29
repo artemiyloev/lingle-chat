@@ -14,7 +14,8 @@
         #auth-box { width: 100%; max-width: 350px; background: #1e2a2e; padding: 30px; border-radius: 16px; display: flex; flex-direction: column; gap: 15px; }
         #auth-box h2 { text-align: center; margin-bottom: 10px; }
         #auth-box input { background: #2a3942; border: none; padding: 12px; border-radius: 8px; color: #fff; font-size: 16px; width: 100%; outline: none; }
-        #auth-box button { background: #4caf50; border: none; padding: 12px; border-radius: 8px; color: #fff; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; }
+        #auth-box button { background: #4caf50; border: none; padding: 12px; border-radius: 8px; color: #fff; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; }
+        #auth-box .toggle { background: transparent; color: #8696a0; border: none; padding: 10px; cursor: pointer; font-size: 14px; text-align: center; width: 100%; }
         #auth-box .error { color: #ff4d4d; text-align: center; font-size: 14px; margin-top: -10px; }
         
         /* Чат */
@@ -56,14 +57,16 @@
 </head>
 <body>
 <div id="app">
-    <!-- Вход -->
+    <!-- Вход / Регистрация -->
     <div id="auth-container">
         <div id="auth-box">
-            <h2 data-i18n="welcome">Lingle</h2>
+            <h2 id="auth-title">Lingle</h2>
             <input type="email" id="auth-email" placeholder="Email">
             <input type="password" id="auth-password" placeholder="Пароль">
+            <input type="text" id="reg-username" placeholder="Имя пользователя" style="display: none;">
             <div class="error" id="auth-error"></div>
-            <button data-i18n="login" id="auth-btn">Войти</button>
+            <button id="auth-btn">Войти</button>
+            <button class="toggle" id="auth-toggle">Нет аккаунта? Зарегистрироваться</button>
         </div>
     </div>
 
@@ -145,27 +148,59 @@
         document.head.appendChild(script);
     }
 
-    // --- Авторизация ---
+    // --- Авторизация (Вход / Регистрация) ---
     const authContainer = document.getElementById('auth-container');
     const chatContainer = document.getElementById('chat-container');
+    const authTitle = document.getElementById('auth-title');
     const authEmail = document.getElementById('auth-email');
     const authPassword = document.getElementById('auth-password');
+    const regUsername = document.getElementById('reg-username');
     const authBtn = document.getElementById('auth-btn');
+    const authToggle = document.getElementById('auth-toggle');
     const authError = document.getElementById('auth-error');
+
+    let isLoginMode = true;
     let socket = null;
+
+    authToggle.onclick = () => {
+        isLoginMode = !isLoginMode;
+        if (isLoginMode) {
+            authTitle.textContent = 'Lingle';
+            authBtn.textContent = 'Войти';
+            regUsername.style.display = 'none';
+            authToggle.textContent = 'Нет аккаунта? Зарегистрироваться';
+        } else {
+            authTitle.textContent = 'Регистрация Lingle';
+            authBtn.textContent = 'Зарегистрироваться';
+            regUsername.style.display = 'block';
+            authToggle.textContent = 'Уже есть аккаунт? Войти';
+        }
+        authError.textContent = '';
+    };
 
     authBtn.onclick = async () => {
         const email = authEmail.value.trim();
         const password = authPassword.value.trim();
+        const username = regUsername.value.trim();
         if (!email || !password) return authError.textContent = 'Заполните поля!';
-        const res = await fetch('/api/login', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-        const data = await res.json();
-        if (!res.ok) return authError.textContent = data.error || 'Ошибка входа';
-        localStorage.setItem('token', data.token);
-        startApp();
+        if (!isLoginMode && !username) return authError.textContent = 'Придумайте имя пользователя!';
+
+        const url = isLoginMode ? '/api/login' : '/api/register';
+        const body = isLoginMode ? { email, password } : { email, password, username };
+
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Ошибка');
+            localStorage.setItem('token', data.token);
+            startApp();
+        } catch (err) {
+            authError.textContent = err.message;
+        }
     };
 
     function startApp() {
