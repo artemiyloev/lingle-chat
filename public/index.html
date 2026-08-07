@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Lingle</title>
+    <link rel="manifest" href="/manifest.json">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, sans-serif; }
         body { background: #0b1416; color: #fff; display: flex; justify-content: center; height: 100vh; margin: 0; }
@@ -20,13 +21,22 @@
         
         /* Чат */
         #chat-container { display: none; flex: 1; flex-direction: column; }
-        #header { padding: 10px 15px; background: #1e2a2e; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a3942; }
+        #header { padding: 8px 15px; background: #1e2a2e; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a3942; }
         #header-left { display: flex; align-items: center; gap: 10px; }
         #header-left .title { font-weight: 600; font-size: 18px; }
         #header-left .subtitle { font-size: 13px; color: #8696a0; }
-        #header-right { display: flex; align-items: center; gap: 8px; }
+        #header-right { display: flex; align-items: center; gap: 8px; position: relative; }
         #header-right select { background: #2a3942; color: #fff; border: none; padding: 6px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; outline: none; }
         #header-right button { background: transparent; border: none; color: #fff; font-size: 20px; padding: 5px; cursor: pointer; }
+        
+        /* Поле поиска пользователей */
+        #search-users { background: #2a3942; border: none; padding: 8px 12px; border-radius: 20px; color: #fff; font-size: 14px; width: 120px; outline: none; }
+        #search-users:focus { width: 180px; background: #333; transition: 0.2s; }
+        #search-results { display: none; position: absolute; top: 45px; right: 0; width: 250px; background: #1e2a2e; border-radius: 12px; padding: 8px; box-shadow: 0 8px 20px rgba(0,0,0,0.7); z-index: 30; max-height: 200px; overflow-y: auto; }
+        #search-results div { padding: 10px; border-bottom: 1px solid #2a3942; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        #search-results div:hover { background: #2a3942; border-radius: 6px; }
+        #search-results div:last-child { border-bottom: none; }
+
         #messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
         .msg { display: flex; width: 100%; margin-bottom: 4px; }
         .msg-content { max-width: 80%; padding: 8px 12px; border-radius: 8px; position: relative; word-wrap: break-word; }
@@ -38,7 +48,6 @@
         .msg .text { font-size: 15px; line-height: 1.4; }
         .msg .time { font-size: 11px; color: #8696a0; float: right; margin-top: 4px; margin-left: 8px; }
         
-        /* Поле ввода */
         #input-area { display: flex; padding: 10px 15px; background: #1e2a2e; gap: 10px; align-items: center; border-top: 1px solid #2a3942; }
         #msgInput { flex: 1; background: #2a3942; border: none; padding: 10px 15px; border-radius: 20px; color: #fff; outline: none; font-size: 15px; }
         #sendBtn { background: #4caf50; border: none; width: 45px; height: 45px; border-radius: 50%; color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -75,11 +84,13 @@
         <div id="header">
             <div id="header-left">
                 <div>
-                    <div class="title">Lingle</div>
+                    <div class="title" id="current-room-name">Общий чат</div>
                     <div class="subtitle" id="online-status">Вы вошли</div>
                 </div>
             </div>
             <div id="header-right">
+                <input type="text" id="search-users" placeholder="Поиск людей...">
+                <div id="search-results"></div>
                 <select id="lang-select">
                     <option value="ru">Русский</option>
                     <option value="en">English</option>
@@ -129,7 +140,7 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-    // --- Языки ---
+    // ========== ЯЗЫКИ ==========
     let currentLang = 'ru';
     loadLanguage(currentLang);
     document.getElementById('lang-select').addEventListener('change', function() {
@@ -148,7 +159,7 @@
         document.head.appendChild(script);
     }
 
-    // --- Авторизация (Вход / Регистрация) ---
+    // ========== АВТОРИЗАЦИЯ ==========
     const authContainer = document.getElementById('auth-container');
     const chatContainer = document.getElementById('chat-container');
     const authTitle = document.getElementById('auth-title');
@@ -161,6 +172,7 @@
 
     let isLoginMode = true;
     let socket = null;
+    let currentUserId = null;
 
     authToggle.onclick = () => {
         isLoginMode = !isLoginMode;
@@ -189,11 +201,7 @@
         const body = isLoginMode ? { email, password } : { email, password, username };
 
         try {
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
+            const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Ошибка');
             localStorage.setItem('token', data.token);
@@ -208,30 +216,101 @@
         chatContainer.style.display = 'flex';
         const token = localStorage.getItem('token');
         socket = io({ auth: { token } });
-        socket.emit('join_room', 1);
+
+        // Получаем свой ID из ответа сервера (сохраняем для логики поиска)
+        socket.on('connect', () => {
+            currentUserId = socket.userId;
+            joinRoom('1', 'Общий чат');
+        });
+
         socket.on('load_history', msgs => msgs.forEach(addMessage));
         socket.on('receive_message', addMessage);
         initWebRTC();
     }
 
+    // ========== ПОИСК ПОЛЬЗОВАТЕЛЕЙ ==========
+    const searchInput = document.getElementById('search-users');
+    const searchResults = document.getElementById('search-results');
+
+    searchInput.addEventListener('input', async (e) => {
+        const query = e.target.value.trim();
+        searchResults.style.display = 'none';
+        searchResults.innerHTML = '';
+
+        if (query.length < 1) return;
+
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        try {
+            const res = await fetch(`/api/search-users?q=${encodeURIComponent(query)}`, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const users = await res.json();
+            
+            if (users.length > 0) {
+                searchResults.style.display = 'block';
+                users.forEach(user => {
+                    const div = document.createElement('div');
+                    div.innerHTML = `<span>${user.username} (${user.email})</span><span style="color:#4caf50;font-size:12px;">ID:${user.id}</span>`;
+                    div.onclick = () => {
+                        startPrivateChat(user.id, user.username);
+                        searchResults.style.display = 'none';
+                        searchInput.value = '';
+                    };
+                    searchResults.appendChild(div);
+                });
+            }
+        } catch (err) {
+            console.error('Ошибка поиска:', err);
+        }
+    });
+
+    // ========== ПРИВАТНЫЕ ЧАТЫ ==========
+    function startPrivateChat(targetUserId, targetUsername) {
+        if (!currentUserId) return;
+        const roomId = `chat_${Math.min(currentUserId, targetUserId)}_${Math.max(currentUserId, targetUserId)}`;
+        joinRoom(roomId, `Чат с ${targetUsername}`);
+    }
+
+    function joinRoom(roomId, roomName) {
+        if (!socket) return;
+        document.getElementById('current-room-name').textContent = roomName;
+        document.getElementById('messages').innerHTML = '';
+        socket.emit('join_room', roomId);
+        socket.once('load_history', (msgs) => msgs.forEach(addMessage));
+    }
+
+    // ========== ЧАТ ==========
+    const messagesDiv = document.getElementById('messages');
+    const msgInput = document.getElementById('msgInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const onlineStatus = document.getElementById('online-status');
+
     function addMessage(msg) {
         const div = document.createElement('div');
         div.className = `msg ${socket && msg.user_id === socket.userId ? 'self' : 'other'}`;
         let timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (msg.time) {
+            const date = new Date(msg.time);
+            if (!isNaN(date)) timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
         div.innerHTML = `<div class="msg-content"><span class="username">${msg.username}</span><div class="text">${msg.text}</div><span class="time">${timeStr}</span></div>`;
-        document.getElementById('messages').appendChild(div);
-        document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
-    document.getElementById('sendBtn').onclick = () => {
-        const text = document.getElementById('msgInput').value.trim();
+    sendBtn.onclick = () => {
+        const text = msgInput.value.trim();
         if (!text || !socket) return;
-        socket.emit('send_message', { roomId: 1, text });
-        document.getElementById('msgInput').value = '';
+        // Отправляем текущий roomId (который мы сохранили в joinRoom как переменную)
+        const currentRoomId = document.getElementById('current-room-name').dataset.roomId || '1';
+        socket.emit('send_message', { roomId: currentRoomId, text });
+        msgInput.value = '';
     };
-    document.getElementById('msgInput').onkeypress = (e) => { if (e.key === 'Enter') document.getElementById('sendBtn').click(); };
+    msgInput.onkeypress = (e) => { if (e.key === 'Enter') sendBtn.click(); };
 
-    // --- Звонки (WebRTC) ---
+    // ========== ЗВОНКИ (WebRTC) ==========
     let pc = null, localStream = null, remoteSocketId = null, isCaller = false;
     const callOverlay = document.getElementById('call-overlay');
     const callStatus = document.getElementById('call-status');
@@ -278,7 +357,7 @@
                 };
                 pc.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
                 pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
-                    socket.emit('call_user', { targetRoomId: 1, offer: pc.localDescription });
+                    socket.emit('call_user', { targetRoomId: '1', offer: pc.localDescription });
                 });
             }).catch(err => { alert('Нет доступа к камере/микрофону'); endCall(); });
     }
@@ -295,30 +374,4 @@
                         { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
                         { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
                     ]
-                });
-                stream.getTracks().forEach(track => pc.addTrack(track, stream));
-                pc.onicecandidate = (e) => {
-                    if (e.candidate && remoteSocketId) socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate });
-                };
-                pc.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
-                pc.setRemoteDescription(window.pendingOffer).then(() => pc.createAnswer()).then(answer => pc.setLocalDescription(answer)).then(() => {
-                    socket.emit('answer_call', { targetId: remoteSocketId, answer: pc.localDescription });
-                    callStatus.textContent = 'Разговор идёт...';
-                });
-            }).catch(err => { alert('Ошибка'); endCall(); });
-    };
-
-    document.getElementById('audio-call-btn').onclick = () => initiateCall(false);
-    document.getElementById('video-call-btn').onclick = () => initiateCall(true);
-
-    function endCall() {
-        if (pc) { pc.close(); pc = null; }
-        if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-        callOverlay.style.display = 'none';
-        localVideo.srcObject = null; remoteVideo.srcObject = null;
-        if (socket) socket.emit('hangup', { roomId: 1 });
-    }
-    callEndBtn.onclick = endCall;
-</script>
-</body>
-</html>
+             
