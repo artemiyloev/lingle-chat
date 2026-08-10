@@ -10,7 +10,7 @@
         body { background: #0b1416; color: #fff; display: flex; justify-content: center; height: 100vh; margin: 0; }
         #app { width: 100%; max-width: 500px; height: 100vh; background: #0b1416; display: flex; flex-direction: column; position: relative; overflow: hidden; }
         
-        /* Экран входа */
+        /* Авторизация */
         #auth-container { display: flex; flex: 1; flex-direction: column; justify-content: center; align-items: center; padding: 30px; }
         #auth-box { width: 100%; max-width: 350px; background: #1e2a2e; padding: 30px; border-radius: 16px; display: flex; flex-direction: column; gap: 15px; }
         #auth-box h2 { text-align: center; margin-bottom: 10px; }
@@ -18,25 +18,28 @@
         #auth-box button { background: #4caf50; border: none; padding: 12px; border-radius: 8px; color: #fff; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; }
         #auth-box .toggle { background: transparent; color: #8696a0; border: none; padding: 10px; cursor: pointer; font-size: 14px; text-align: center; width: 100%; }
         #auth-box .error { color: #ff4d4d; text-align: center; font-size: 14px; margin-top: -10px; }
-        
-        /* Чат */
-        #chat-container { display: none; flex: 1; flex-direction: column; }
-        #header { padding: 8px 15px; background: #1e2a2e; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a3942; }
-        #header-left { display: flex; align-items: center; gap: 10px; }
-        #header-left .title { font-weight: 600; font-size: 18px; }
-        #header-left .subtitle { font-size: 13px; color: #8696a0; }
-        #header-right { display: flex; align-items: center; gap: 8px; position: relative; }
-        #header-right select { background: #2a3942; color: #fff; border: none; padding: 6px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; outline: none; }
-        #header-right button { background: transparent; border: none; color: #fff; font-size: 20px; padding: 5px; cursor: pointer; }
-        
-        /* Поле поиска пользователей */
-        #search-users { background: #2a3942; border: none; padding: 8px 12px; border-radius: 20px; color: #fff; font-size: 14px; width: 120px; outline: none; }
-        #search-users:focus { width: 180px; background: #333; transition: 0.2s; }
-        #search-results { display: none; position: absolute; top: 45px; right: 0; width: 250px; background: #1e2a2e; border-radius: 12px; padding: 8px; box-shadow: 0 8px 20px rgba(0,0,0,0.7); z-index: 30; max-height: 200px; overflow-y: auto; }
-        #search-results div { padding: 10px; border-bottom: 1px solid #2a3942; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-        #search-results div:hover { background: #2a3942; border-radius: 6px; }
-        #search-results div:last-child { border-bottom: none; }
 
+        /* Список чатов (главная) */
+        #chats-container { display: none; flex: 1; flex-direction: column; }
+        #chats-header { padding: 12px 15px; background: #1e2a2e; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a3942; }
+        #chats-header h2 { font-weight: 600; font-size: 20px; }
+        #chats-header input { background: #2a3942; border: none; padding: 6px 12px; border-radius: 20px; color: #fff; font-size: 14px; width: 120px; outline: none; }
+        
+        #chat-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+        #chat-list::-webkit-scrollbar { width: 4px; }
+        #chat-list::-webkit-scrollbar-thumb { background: #2a3942; border-radius: 4px; }
+        
+        .chat-item { display: flex; padding: 12px 16px; border-bottom: 1px solid #1e2a2e; cursor: pointer; transition: 0.1s; }
+        .chat-item:active { background: #1e2a2e; }
+        .chat-item .info { flex: 1; }
+        .chat-item .info h4 { font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+        .chat-item .info p { font-size: 14px; color: #8696a0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Окно чата (сама переписка) */
+        #chat-window { display: none; flex: 1; flex-direction: column; }
+        #chat-header { padding: 10px 15px; background: #1e2a2e; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #2a3942; }
+        #chat-header .back { background: transparent; border: none; color: #fff; font-size: 22px; cursor: pointer; }
+        #chat-header .name { font-weight: 600; font-size: 16px; }
         #messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
         .msg { display: flex; width: 100%; margin-bottom: 4px; }
         .msg-content { max-width: 80%; padding: 8px 12px; border-radius: 8px; position: relative; word-wrap: break-word; }
@@ -47,12 +50,12 @@
         .msg .username { font-weight: bold; font-size: 13px; color: #4caf50; display: block; margin-bottom: 2px; }
         .msg .text { font-size: 15px; line-height: 1.4; }
         .msg .time { font-size: 11px; color: #8696a0; float: right; margin-top: 4px; margin-left: 8px; }
-        
+
         #input-area { display: flex; padding: 10px 15px; background: #1e2a2e; gap: 10px; align-items: center; border-top: 1px solid #2a3942; }
         #msgInput { flex: 1; background: #2a3942; border: none; padding: 10px 15px; border-radius: 20px; color: #fff; outline: none; font-size: 15px; }
         #sendBtn { background: #4caf50; border: none; width: 45px; height: 45px; border-radius: 50%; color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         
-        /* Окно звонка */
+        /* Звонки */
         #call-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 20; justify-content: center; align-items: center; flex-direction: column; }
         #call-box { background: #1a1a1a; width: 90%; max-width: 400px; border-radius: 24px; padding: 20px; text-align: center; display: flex; flex-direction: column; gap: 10px; position: relative; }
         #call-box video { width: 100%; max-height: 200px; background: #000; border-radius: 12px; object-fit: cover; }
@@ -79,42 +82,23 @@
         </div>
     </div>
 
-    <!-- Чат -->
-    <div id="chat-container">
-        <div id="header">
-            <div id="header-left">
-                <div>
-                    <div class="title" id="current-room-name">Общий чат</div>
-                    <div class="subtitle" id="online-status">Вы вошли</div>
-                </div>
-            </div>
-            <div id="header-right">
-                <input type="text" id="search-users" placeholder="Поиск людей...">
-                <div id="search-results"></div>
-                <select id="lang-select">
-                    <option value="ru">Русский</option>
-                    <option value="en">English</option>
-                    <option value="zh">中文</option>
-                    <option value="de">Deutsch</option>
-                    <option value="ja">日本語</option>
-                    <option value="kk">Қазақша</option>
-                    <option value="pl">Polski</option>
-                    <option value="es">Español</option>
-                    <option value="it">Italiano</option>
-                    <option value="fr">Français</option>
-                    <option value="sl">Slovenščina</option>
-                    <option value="sk">Slovenčina</option>
-                    <option value="be">Беларуская</option>
-                    <option value="ar">العربية</option>
-                    <option value="tr">Türkçe</option>
-                    <option value="pt">Português</option>
-                    <option value="el">Ελληνικά</option>
-                    <option value="is">Íslenska</option>
-                    <option value="ga">Gaeilge</option>
-                    <option value="ko">한국어</option>
-                </select>
-                <button id="audio-call-btn" title="Аудиозвонок">🎧</button>
-                <button id="video-call-btn" title="Видеозвонок">📹</button>
+    <!-- Список чатов (главная) -->
+    <div id="chats-container">
+        <div id="chats-header">
+            <h2>Чаты</h2>
+            <input type="text" id="search-users" placeholder="Найти людей...">
+        </div>
+        <div id="chat-list"></div>
+    </div>
+
+    <!-- Окно переписки (открывается при клике на чат) -->
+    <div id="chat-window">
+        <div id="chat-header">
+            <button class="back" id="backBtn">‹</button>
+            <div class="name" id="current-chat-name">...</div>
+            <div style="flex:1; text-align:right; gap:10px; display:flex; justify-content:flex-end;">
+                <button id="audio-call-btn" style="background:transparent; border:none; color:#fff; font-size:20px; cursor:pointer;">🎧</button>
+                <button id="video-call-btn" style="background:transparent; border:none; color:#fff; font-size:20px; cursor:pointer;">📹</button>
             </div>
         </div>
         <div id="messages"></div>
@@ -140,29 +124,8 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-    // ========== ЯЗЫКИ ==========
-    let currentLang = 'ru';
-    loadLanguage(currentLang);
-    document.getElementById('lang-select').addEventListener('change', function() {
-        currentLang = this.value;
-        loadLanguage(currentLang);
-    });
-    function loadLanguage(lang) {
-        const script = document.createElement('script');
-        script.src = `/lang-${lang}.js`;
-        script.onload = function() {
-            document.querySelectorAll('[data-i18n]').forEach(el => {
-                const key = el.getAttribute('data-i18n');
-                if (LANG[key]) el.textContent = LANG[key];
-            });
-        };
-        document.head.appendChild(script);
-    }
-
-    // ========== АВТОРИЗАЦИЯ ==========
+    // --- Авторизация ---
     const authContainer = document.getElementById('auth-container');
-    const chatContainer = document.getElementById('chat-container');
-    const authTitle = document.getElementById('auth-title');
     const authEmail = document.getElementById('auth-email');
     const authPassword = document.getElementById('auth-password');
     const regUsername = document.getElementById('reg-username');
@@ -177,12 +140,12 @@
     authToggle.onclick = () => {
         isLoginMode = !isLoginMode;
         if (isLoginMode) {
-            authTitle.textContent = 'Lingle';
+            document.getElementById('auth-title').textContent = 'Lingle';
             authBtn.textContent = 'Войти';
             regUsername.style.display = 'none';
             authToggle.textContent = 'Нет аккаунта? Зарегистрироваться';
         } else {
-            authTitle.textContent = 'Регистрация Lingle';
+            document.getElementById('auth-title').textContent = 'Регистрация Lingle';
             authBtn.textContent = 'Зарегистрироваться';
             regUsername.style.display = 'block';
             authToggle.textContent = 'Уже есть аккаунт? Войти';
@@ -195,7 +158,7 @@
         const password = authPassword.value.trim();
         const username = regUsername.value.trim();
         if (!email || !password) return authError.textContent = 'Заполните поля!';
-        if (!isLoginMode && !username) return authError.textContent = 'Придумайте имя пользователя!';
+        if (!isLoginMode && !username) return authError.textContent = 'Придумайте имя!';
 
         const url = isLoginMode ? '/api/login' : '/api/register';
         const body = isLoginMode ? { email, password } : { email, password, username };
@@ -206,87 +169,62 @@
             if (!res.ok) throw new Error(data.error || 'Ошибка');
             localStorage.setItem('token', data.token);
             startApp();
-        } catch (err) {
-            authError.textContent = err.message;
-        }
+        } catch (err) { authError.textContent = err.message; }
     };
 
+    // --- Запуск приложения ---
     function startApp() {
         authContainer.style.display = 'none';
-        chatContainer.style.display = 'flex';
         const token = localStorage.getItem('token');
         socket = io({ auth: { token } });
-
-        // Получаем свой ID из ответа сервера (сохраняем для логики поиска)
-        socket.on('connect', () => {
-            currentUserId = socket.userId;
-            joinRoom('1', 'Общий чат');
-        });
-
-        socket.on('load_history', msgs => msgs.forEach(addMessage));
-        socket.on('receive_message', addMessage);
-        initWebRTC();
+        socket.on('your_id', (id) => { currentUserId = id; });
+        loadChats();
     }
 
-    // ========== ПОИСК ПОЛЬЗОВАТЕЛЕЙ ==========
-    const searchInput = document.getElementById('search-users');
-    const searchResults = document.getElementById('search-results');
-
-    searchInput.addEventListener('input', async (e) => {
-        const query = e.target.value.trim();
-        searchResults.style.display = 'none';
-        searchResults.innerHTML = '';
-
-        if (query.length < 1) return;
-
+    // --- Загрузка списка диалогов ---
+    async function loadChats() {
         const token = localStorage.getItem('token');
-        if (!token) return;
-
-        try {
-            const res = await fetch(`/api/search-users?q=${encodeURIComponent(query)}`, {
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
-            const users = await res.json();
-            
-            if (users.length > 0) {
-                searchResults.style.display = 'block';
-                users.forEach(user => {
-                    const div = document.createElement('div');
-                    div.innerHTML = `<span>${user.username} (${user.email})</span><span style="color:#4caf50;font-size:12px;">ID:${user.id}</span>`;
-                    div.onclick = () => {
-                        startPrivateChat(user.id, user.username);
-                        searchResults.style.display = 'none';
-                        searchInput.value = '';
-                    };
-                    searchResults.appendChild(div);
-                });
-            }
-        } catch (err) {
-            console.error('Ошибка поиска:', err);
-        }
-    });
-
-    // ========== ПРИВАТНЫЕ ЧАТЫ ==========
-    function startPrivateChat(targetUserId, targetUsername) {
-        if (!currentUserId) return;
-        const roomId = `chat_${Math.min(currentUserId, targetUserId)}_${Math.max(currentUserId, targetUserId)}`;
-        joinRoom(roomId, `Чат с ${targetUsername}`);
+        const res = await fetch('/api/my-chats', { headers: { 'Authorization': 'Bearer ' + token } });
+        const chats = await res.json();
+        renderChats(chats);
     }
 
-    function joinRoom(roomId, roomName) {
-        if (!socket) return;
-        document.getElementById('current-room-name').textContent = roomName;
+    function renderChats(chats) {
+        const list = document.getElementById('chat-list');
+        list.innerHTML = '';
+        chats.forEach(chat => {
+            const div = document.createElement('div');
+            div.className = 'chat-item';
+            div.innerHTML = `
+                <div class="info">
+                    <h4>${chat.target_username}</h4>
+                    <p>${chat.last_message || 'Начните чат...'}</p>
+                </div>
+            `;
+            div.onclick = () => openChat(chat.chat_room_id, chat.target_user_id, chat.target_username);
+            list.appendChild(div);
+        });
+        document.getElementById('chats-container').style.display = 'flex';
+    }
+
+    // --- Открытие чата ---
+    function openChat(roomId, targetId, targetUsername) {
+        document.getElementById('chats-container').style.display = 'none';
+        document.getElementById('chat-window').style.display = 'flex';
+        document.getElementById('current-chat-name').textContent = targetUsername;
         document.getElementById('messages').innerHTML = '';
-        socket.emit('join_room', roomId);
+        socket.emit('join_room', roomId, targetId, targetUsername);
         socket.once('load_history', (msgs) => msgs.forEach(addMessage));
     }
 
-    // ========== ЧАТ ==========
-    const messagesDiv = document.getElementById('messages');
-    const msgInput = document.getElementById('msgInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const onlineStatus = document.getElementById('online-status');
+    // --- Кнопка "Назад" к списку чатов ---
+    document.getElementById('backBtn').onclick = () => {
+        document.getElementById('chat-window').style.display = 'none';
+        document.getElementById('chats-container').style.display = 'flex';
+        loadChats(); // перезагружаем список, чтобы обновить последнее сообщение
+    };
 
+    // --- Сообщения ---
     function addMessage(msg) {
         const div = document.createElement('div');
         div.className = `msg ${socket && msg.user_id === socket.userId ? 'self' : 'other'}`;
@@ -296,21 +234,49 @@
             if (!isNaN(date)) timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
         div.innerHTML = `<div class="msg-content"><span class="username">${msg.username}</span><div class="text">${msg.text}</div><span class="time">${timeStr}</span></div>`;
-        messagesDiv.appendChild(div);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        document.getElementById('messages').appendChild(div);
+        document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        
+        // Обновляем последнее сообщение в списке (если мы в чате, оно обновится при выходе)
+        if (socket && msg.user_id !== socket.userId) {
+            // Можно сохранить в localStorage, но мы просто перезагрузим список при выходе
+        }
     }
 
-    sendBtn.onclick = () => {
-        const text = msgInput.value.trim();
+    document.getElementById('sendBtn').onclick = () => {
+        const roomId = document.getElementById('current-chat-name').dataset.roomId || '1'; // fallback
+        const text = document.getElementById('msgInput').value.trim();
         if (!text || !socket) return;
-        // Отправляем текущий roomId (который мы сохранили в joinRoom как переменную)
-        const currentRoomId = document.getElementById('current-room-name').dataset.roomId || '1';
-        socket.emit('send_message', { roomId: currentRoomId, text });
-        msgInput.value = '';
+        socket.emit('send_message', { roomId: roomId, text });
+        document.getElementById('msgInput').value = '';
     };
-    msgInput.onkeypress = (e) => { if (e.key === 'Enter') sendBtn.click(); };
+    document.getElementById('msgInput').onkeypress = (e) => { if (e.key === 'Enter') document.getElementById('sendBtn').click(); };
 
-    // ========== ЗВОНКИ (WebRTC) ==========
+    // --- Поиск людей ---
+    document.getElementById('search-users').addEventListener('input', async (e) => {
+        const query = e.target.value.trim();
+        if (query.length < 1) return loadChats();
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/search-users?q=${encodeURIComponent(query)}`, { headers: { 'Authorization': 'Bearer ' + token } });
+        const users = await res.json();
+        
+        const list = document.getElementById('chat-list');
+        list.innerHTML = '';
+        users.forEach(user => {
+            if (user.id === currentUserId) return; // не показываем себя
+            const div = document.createElement('div');
+            div.className = 'chat-item';
+            div.innerHTML = `<div class="info"><h4>${user.username}</h4><p>${user.email}</p></div>`;
+            div.onclick = () => {
+                const roomId = `chat_${Math.min(currentUserId, user.id)}_${Math.max(currentUserId, user.id)}`;
+                openChat(roomId, user.id, user.username);
+                document.getElementById('search-users').value = '';
+            };
+            list.appendChild(div);
+        });
+    });
+
+    // --- Звонки (WebRTC) ---
     let pc = null, localStream = null, remoteSocketId = null, isCaller = false;
     const callOverlay = document.getElementById('call-overlay');
     const callStatus = document.getElementById('call-status');
@@ -318,7 +284,7 @@
     const remoteVideo = document.getElementById('remote-video');
     const callEndBtn = document.getElementById('call-end-btn');
     const callAnswerBtn = document.getElementById('call-answer-btn');
-
+    
     function initWebRTC() {
         socket.on('incoming_call', (data) => {
             callOverlay.style.display = 'flex';
@@ -327,9 +293,7 @@
             remoteSocketId = data.from;
             window.pendingOffer = data.offer;
         });
-        socket.on('call_answered', (data) => {
-            pc.setRemoteDescription(data.answer).then(() => { callStatus.textContent = 'Разговор идёт...'; });
-        });
+        socket.on('call_answered', (data) => { pc.setRemoteDescription(data.answer).then(() => { callStatus.textContent = 'Разговор идёт...'; }); });
         socket.on('ice_candidate', (candidate) => { if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate)); });
         socket.on('call_ended', () => { endCall(); alert('Звонок завершён'); });
     }
@@ -344,13 +308,7 @@
             .then(stream => {
                 localStream = stream; localVideo.srcObject = stream;
                 localVideo.style.display = useVideo ? 'block' : 'none';
-                pc = new RTCPeerConnection({
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
-                    ]
-                });
+                pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }] });
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
                 pc.onicecandidate = (e) => {
                     if (e.candidate && remoteSocketId) socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate });
@@ -368,10 +326,32 @@
         navigator.mediaDevices.getUserMedia({ audio: true, video: true })
             .then(stream => {
                 localStream = stream; localVideo.srcObject = stream; localVideo.style.display = 'block';
-                pc = new RTCPeerConnection({
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
-                    ]
-             
+                pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }] });
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+                pc.onicecandidate = (e) => {
+                    if (e.candidate && remoteSocketId) socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate });
+                };
+                pc.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
+                pc.setRemoteDescription(window.pendingOffer).then(() => pc.createAnswer()).then(answer => pc.setLocalDescription(answer)).then(() => {
+                    socket.emit('answer_call', { targetId: remoteSocketId, answer: pc.localDescription });
+                    callStatus.textContent = 'Разговор идёт...';
+                });
+            }).catch(err => { alert('Ошибка'); endCall(); });
+    };
+    document.getElementById('audio-call-btn').onclick = () => initiateCall(false);
+    document.getElementById('video-call-btn').onclick = () => initiateCall(true);
+
+    function endCall() {
+        if (pc) { pc.close(); pc = null; }
+        if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+        callOverlay.style.display = 'none';
+        localVideo.srcObject = null; remoteVideo.srcObject = null;
+        if (socket) socket.emit('hangup', { roomId: '1' });
+    }
+    callEndBtn.onclick = endCall;
+
+    // Инициализация WebRTC при старте
+    initWebRTC();
+</script>
+</body>
+</html> 
