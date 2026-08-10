@@ -4,9 +4,6 @@ const socketIo = require('socket.io');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -16,29 +13,9 @@ app.use(express.static('public'));
 app.use(express.json());
 
 const SECRET_KEY = 'lingle_secret_2026';
-
-// Настройка загрузки файлов
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = './uploads';
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
-});
-const upload = multer({ storage });
-app.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
-  res.json({ filename: req.file.filename, originalname: req.file.originalname, url: `/uploads/${req.file.filename}` });
-});
-app.use('/uploads', express.static('uploads'));
-
-// Подключаем SQLite
 const db = new Database('db.sqlite');
 
-// Создаём таблицы
+// Создаём таблицы (добавлена таблица user_chats для списка диалогов)
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,77 +24,75 @@ db.exec(`
     password_hash TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
-  CREATE TABLE IF NOT EXISTS rooms (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
   CREATE TABLE IF NOT EXISTS room_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_id INTEGER,
+    room_id TEXT NOT NULL,
     user_id INTEGER,
     username TEXT NOT NULL,
     text TEXT NOT NULL,
-    file TEXT,            -- ссылка на файл, если есть
     time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS user_chats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    chat_room_id TEXT NOT NULL,
+    target_user_id INTEGER NOT NULL,
+    target_username TEXT NOT NULL,
+    last_message TEXT DEFAULT '',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, chat_room_id)
   );
 `);
 
-// --- Регистрация / вход ---
+// --- АУТЕНТИФИКАЦИЯ ---
 app.post('/api/register', (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: 'Заполните все поля' });
-
   try {
-    const existing = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
-    if (existing) return res.status(409).json({ error: 'Почта или имя уже заняты' });
-
+    if (db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username))
+      return res.status(409).json({ error: 'Почта или имя уже заняты' });
     const hash = bcrypt.hashSync(password, 10);
     const info = db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)').run(username, email, hash);
     const token = jwt.sign({ userId: info.lastInsertRowid, username }, SECRET_KEY, { expiresIn: '7d' });
     res.json({ token, user: { id: info.lastInsertRowid, username, email } });
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка регистрации' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Ошибка регистрации' }); }
 });
 
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Введите почту и пароль' });
-
   try {
     const user = db.prepare('SELECT id, username, password_hash FROM users WHERE email = ?').get(email);
     if (!user) return res.status(401).json({ error: 'Неверная почта или пароль' });
-    const valid = bcrypt.compareSync(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Неверная почта или пароль' });
+    if (!bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Неверная почта или пароль' });
     const token = jwt.sign({ userId: user.id, username: user.username }, SECRET_KEY, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, username: user.username, email } });
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка входа' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Ошибка входа' }); }
 });
 
-app.get('/api/rooms', (req, res) => {
+// --- API для получения списка диалогов ---
+app.get('/api/my-chats', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Нет токена' });
   try {
-    const rows = db.prepare('SELECT id, name FROM rooms ORDER BY id ASC').all();
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка загрузки' });
-  }
+    const decoded = jwt.verify(token, SECRET_KEY);
+    const userId = decoded.userId;
+    const chats = db.prepare('SELECT * FROM user_chats WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
+    res.json(chats);
+  } catch (err) { res.status(500).json({ error: 'Ошибка загрузки диалогов' }); }
 });
 
-app.post('/api/rooms', (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: 'Введите название' });
+// --- ПОИСК ПОЛЬЗОВАТЕЛЕЙ ---
+app.get('/api/search-users', (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json([]);
   try {
-    const info = db.prepare('INSERT INTO rooms (name) VALUES (?)').run(name);
-    res.json({ id: info.lastInsertRowid, name });
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка создания комнаты' });
-  }
+    const users = db.prepare('SELECT id, username, email FROM users WHERE username LIKE ? OR email LIKE ? OR id LIKE ? LIMIT 20').all(`%${query}%`, `%${query}%`, `%${query}%`);
+    res.json(users);
+  } catch (err) { res.status(500).json({ error: 'Ошибка поиска' }); }
 });
 
-// --- Сокеты (чат + голосовые сообщения) ---
+// --- СОКЕТЫ ---
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) { socket.isGuest = true; return next(); }
@@ -126,45 +101,50 @@ io.use((socket, next) => {
     socket.userId = decoded.userId;
     socket.username = decoded.username;
     next();
-  } catch (err) {
-    socket.isGuest = true;
-    next();
-  }
+  } catch (err) { socket.isGuest = true; next(); }
 });
 
 io.on('connection', (socket) => {
-  const currentUsername = socket.username || 'Гость';
-  const currentUserId = socket.userId || null;
+  const currentUserId = socket.userId;
+  const currentUsername = socket.username;
   let currentRoomId = null;
 
-  socket.on('join_room', (roomId) => {
+  socket.emit('your_id', currentUserId);
+
+  socket.on('join_room', (roomId, targetUserId, targetUsername) => {
     if (currentRoomId) socket.leave(`room_${currentRoomId}`);
     currentRoomId = roomId;
     socket.join(`room_${roomId}`);
+
+    // Сохраняем диалог в список чатов пользователя
+    if (targetUserId && currentUserId) {
+      try {
+        db.prepare(`
+          INSERT INTO user_chats (user_id, chat_room_id, target_user_id, target_username) 
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(user_id, chat_room_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+        `).run(currentUserId, roomId, targetUserId, targetUsername);
+      } catch (e) { /* Игнорируем, если уже есть */ }
+    }
+
     const rows = db.prepare('SELECT * FROM room_messages WHERE room_id = ? ORDER BY time ASC LIMIT 50').all(roomId);
     socket.emit('load_history', rows);
   });
 
   socket.on('send_message', (data) => {
-    const { roomId, text, file } = data;
-    if (!roomId) return;
-
-    const stmt = db.prepare('INSERT INTO room_messages (room_id, user_id, username, text, file) VALUES (?, ?, ?, ?, ?)');
-    const info = stmt.run(roomId, currentUserId, currentUsername, text || '', file || null);
-    const savedMsg = {
-      id: info.lastInsertRowid,
-      room_id: roomId,
-      user_id: currentUserId,
-      username: currentUsername,
-      text: text || '',
-      file: file || null,
-      time: new Date()
-    };
+    const { roomId, text } = data;
+    if (!roomId || !text) return;
+    const info = db.prepare('INSERT INTO room_messages (room_id, user_id, username, text) VALUES (?, ?, ?, ?)').run(roomId, currentUserId, currentUsername, text);
+    const savedMsg = { id: info.lastInsertRowid, room_id: roomId, user_id: currentUserId, username: currentUsername, text, time: new Date() };
     io.to(`room_${roomId}`).emit('receive_message', savedMsg);
   });
 
-  // (Звонки убираем — они всё равно не работают на Render)
+  // Звонки (WebRTC) остаются без изменений
+  socket.on('call_user', (data) => socket.to(`room_${data.targetRoomId}`).emit('incoming_call', { from: socket.id, fromUsername: currentUsername, offer: data.offer }));
+  socket.on('answer_call', (data) => io.to(data.targetId).emit('call_answered', { answer: data.answer, from: socket.id }));
+  socket.on('ice_candidate', (data) => io.to(data.targetId).emit('ice_candidate', data.candidate));
+  socket.on('hangup', (data) => socket.to(`room_${data.roomId}`).emit('call_ended'));
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('✅ Lingle с голосовыми сообщениями!'));
+server.listen(PORT, () => console.log('✅ Lingle с чатами как в TG!')); 
