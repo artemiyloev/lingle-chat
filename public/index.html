@@ -3,65 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lingle</title>
+    <title>Lingle Chat</title>
+    <link rel="manifest" href="/manifest.json">
     <style>
-        /* ===== ПРОСТОЙ СТИЛЬ (без теней, без скруглений) ===== */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #f0f0f0; color: #222; }
+        /* Переменные для тем */
+        :root {
+            --bg: #f0f0f0;
+            --text: #222;
+            --header-bg: #e0e0e0;
+            --border: #ccc;
+            --chat-bg: #e9e9e9;
+            --input-bg: #fff;
+            --accent: #4CAF50;
+            --msg-self-bg: #d1e7dd;
+            --msg-other-bg: #fff;
+        }
 
+        body.dark {
+            --bg: #121212;
+            --text: #eee;
+            --header-bg: #1e1e1e;
+            --border: #333;
+            --chat-bg: #181818;
+            --input-bg: #2a2a2a;
+            --accent: #4CAF50;
+            --msg-self-bg: #2e4d3a;
+            --msg-other-bg: #2a2a2a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: var(--bg); color: var(--text); transition: 0.3s; }
+
+        /* Экран входа */
         #auth-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        #auth-box { width: 300px; background: #fff; border: 2px solid #888; padding: 20px; border-radius: 5px; }
+        #auth-box { width: 300px; background: var(--input-bg); border: 2px solid var(--border); padding: 20px; border-radius: 5px; }
         #auth-box h2 { text-align: center; margin-bottom: 15px; }
-        #auth-box input { width: 100%; margin-bottom: 10px; padding: 8px; border: 1px solid #ccc; border-radius: 3px; }
-        #auth-box button { width: 100%; padding: 10px; background: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; }
-        #auth-box button:hover { background: #45a049; }
+        #auth-box input { width: 100%; margin-bottom: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 3px; background: var(--input-bg); color: var(--text); }
+        #auth-box button { width: 100%; padding: 10px; background: var(--accent); color: white; border: none; cursor: pointer; font-size: 16px; }
         #auth-box .toggle { background: none; border: none; color: #0000EE; text-decoration: underline; margin-top: 10px; cursor: pointer; }
         #auth-box .error { color: red; font-size: 14px; margin-bottom: 10px; }
 
+        /* Список чатов */
         #chats-container { display: none; flex-direction: column; height: 100vh; }
-        #chats-header { background: #e0e0e0; padding: 10px; border-bottom: 1px solid #bbb; display: flex; align-items: center; }
-        #chats-header h2 { font-size: 18px; }
-        #search-users { margin-left: auto; padding: 5px; border: 1px solid #bbb; }
+        #chats-header { background: var(--header-bg); padding: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+        #chats-header h2 { font-size: 18px; flex: 1; }
+        #search-users { padding: 5px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); }
+
+        #theme-btn { background: none; border: 1px solid var(--border); padding: 5px 10px; margin-left: 8px; cursor: pointer; color: var(--text); font-size: 14px; }
 
         #chat-list { flex: 1; overflow-y: auto; }
-        .chat-item { padding: 12px; border-bottom: 1px solid #ccc; background: #fff; cursor: pointer; }
-        .chat-item:hover { background: #f5f5f5; }
+        .chat-item { padding: 12px; border-bottom: 1px solid var(--border); background: var(--input-bg); cursor: pointer; }
+        .chat-item:hover { background: var(--header-bg); }
         .chat-item .info h4 { margin-bottom: 4px; font-size: 16px; }
-        .chat-item .info p { color: #666; font-size: 14px; }
+        .chat-item .info p { color: var(--text); font-size: 14px; opacity: 0.7; }
 
+        /* Окно переписки */
         #chat-window { display: none; flex-direction: column; height: 100vh; }
-        #chat-header { background: #e0e0e0; padding: 8px; border-bottom: 1px solid #bbb; display: flex; align-items: center; }
-        #chat-header .back { background: none; border: none; font-size: 24px; margin-right: 10px; cursor: pointer; }
-        #chat-header .name { font-weight: bold; }
-        #chat-header .call-btns { margin-left: auto; }
-        #chat-header .call-btns button { background: none; border: none; font-size: 20px; margin-left: 8px; cursor: pointer; }
+        #chat-header { background: var(--header-bg); padding: 8px; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+        #chat-header .back { background: none; border: none; font-size: 14px; margin-right: 10px; cursor: pointer; color: var(--text); }
+        #chat-header .name { font-weight: bold; flex: 1; }
+        #chat-header .call-btns { display: flex; gap: 5px; }
+        #chat-header .call-btns button { background: none; border: 1px solid var(--border); padding: 5px 8px; cursor: pointer; color: var(--text); font-size: 14px; }
 
-        #messages { flex: 1; padding: 10px; overflow-y: auto; background: #e9e9e9; }
+        #messages { flex: 1; padding: 10px; overflow-y: auto; background: var(--chat-bg); }
         .msg { display: flex; margin-bottom: 8px; }
         .msg-content { padding: 8px 12px; border-radius: 0; max-width: 80%; word-wrap: break-word; }
         .msg.self { justify-content: flex-end; }
-        .msg.self .msg-content { background: #d1e7dd; }
+        .msg.self .msg-content { background: var(--msg-self-bg); }
         .msg.other { justify-content: flex-start; }
-        .msg.other .msg-content { background: #fff; border: 1px solid #ccc; }
-        .msg .username { font-size: 12px; color: #555; display: block; margin-bottom: 2px; }
+        .msg.other .msg-content { background: var(--msg-other-bg); border: 1px solid var(--border); }
+        .msg .username { font-size: 12px; opacity: 0.7; display: block; margin-bottom: 2px; }
         .msg .text { font-size: 15px; }
-        .msg .time { font-size: 11px; color: #888; float: right; margin-top: 4px; margin-left: 8px; }
+        .msg .time { font-size: 11px; opacity: 0.6; float: right; margin-top: 4px; margin-left: 8px; }
 
-        #input-area { display: flex; padding: 10px; background: #fff; border-top: 1px solid #ccc; }
-        #msgInput { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 0; }
-        #sendBtn { padding: 8px 15px; background: #4CAF50; color: white; border: none; margin-left: 5px; cursor: pointer; }
+        #input-area { display: flex; padding: 10px; background: var(--header-bg); border-top: 1px solid var(--border); }
+        #msgInput { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 0; background: var(--input-bg); color: var(--text); }
+        #sendBtn { padding: 8px 15px; background: var(--accent); color: white; border: none; margin-left: 5px; cursor: pointer; }
 
+        /* Окно звонка */
         #call-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
-        #call-box { background: #fff; width: 300px; margin: 50px auto; padding: 20px; text-align: center; border-radius: 5px; }
+        #call-box { background: var(--input-bg); width: 300px; margin: 50px auto; padding: 20px; text-align: center; border-radius: 5px; color: var(--text); }
         #call-box video { width: 100%; max-height: 150px; background: #000; }
         #call-box #local-video { width: 100px; height: 80px; position: fixed; bottom: 20px; right: 20px; border: 1px solid #fff; }
         #call-box .call-info { font-size: 16px; margin-bottom: 10px; }
-        #call-box .call-buttons button { padding: 10px 20px; margin: 5px; font-size: 20px; }
+        #call-box .call-buttons button { padding: 10px 20px; margin: 5px; font-size: 14px; }
         #call-box .btn-end { background: red; color: white; border: none; }
         #call-box .btn-answer { background: green; color: white; border: none; }
     </style>
 </head>
-<body>
+<body class="light">
 <div id="app">
     <!-- Вход / Регистрация -->
     <div id="auth-container">
@@ -81,6 +111,7 @@
         <div id="chats-header">
             <h2>Чаты</h2>
             <input type="text" id="search-users" placeholder="Поиск...">
+            <button id="theme-btn">Тема</button>
         </div>
         <div id="chat-list"></div>
     </div>
@@ -88,11 +119,12 @@
     <!-- Окно переписки -->
     <div id="chat-window">
         <div id="chat-header">
-            <button class="back" id="backBtn">←</button>
+            <button class="back" id="backBtn">Назад</button>
             <span class="name" id="current-chat-name">Чат</span>
             <div class="call-btns">
-                <button id="audio-call-btn">🎧</button>
-                <button id="video-call-btn">📹</button>
+                <button id="audio-call-btn">Аудио</button>
+                <button id="video-call-btn">Видео</button>
+                <button id="theme-btn-2">Тема</button>
             </div>
         </div>
         <div id="messages"></div>
@@ -109,8 +141,8 @@
             <video id="local-video" autoplay playsinline muted></video>
             <div class="call-info" id="call-status">Звонок...</div>
             <div class="call-buttons">
-                <button id="call-end-btn" class="btn-end">📞</button>
-                <button id="call-answer-btn" class="btn-answer" style="display:none;">✅</button>
+                <button id="call-end-btn" class="btn-end">Завершить</button>
+                <button id="call-answer-btn" class="btn-answer" style="display:none;">Ответить</button>
             </div>
         </div>
     </div>
@@ -118,6 +150,31 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+    // ================== ТЕМА ==================
+    const themeBtn = document.getElementById('theme-btn');
+    const themeBtn2 = document.getElementById('theme-btn-2');
+
+    function getTheme() {
+        return localStorage.getItem('theme') || 'light';
+    }
+
+    function applyTheme(theme) {
+        document.body.className = theme;
+        localStorage.setItem('theme', theme);
+    }
+
+    // При загрузке применяем сохранённую тему
+    applyTheme(getTheme());
+
+    function toggleTheme() {
+        const current = getTheme();
+        const next = current === 'light' ? 'dark' : 'light';
+        applyTheme(next);
+    }
+
+    themeBtn.addEventListener('click', toggleTheme);
+    themeBtn2.addEventListener('click', toggleTheme);
+
     // ================== АВТОРИЗАЦИЯ ==================
     const authContainer = document.getElementById('auth-container');
     const authLogin = document.getElementById('auth-login');
@@ -185,13 +242,13 @@
         loadChats();
 
         socket.on('receive_message', (msg) => {
-            // Если мы в открытом чате, добавляем сообщение
             if (document.getElementById('chat-window').style.display !== 'none') {
                 addMessage(msg);
             }
-            // Обновим список чатов после нового сообщения
             loadChats();
         });
+
+        initWebRTC();
     }
 
     // ================== СПИСОК ЧАТОВ ==================
@@ -228,13 +285,11 @@
         document.getElementById('current-chat-name').textContent = targetUsername;
         document.getElementById('messages').innerHTML = '';
 
-        // Присоединяемся к комнате
         socket.emit('join_room', roomId, targetId, targetUsername);
         socket.once('load_history', (msgs) => {
             msgs.forEach(addMessage);
         });
 
-        // Сохраняем текущий roomId, чтобы отправлять сообщения
         window.currentRoomId = roomId;
         window.currentTargetId = targetId;
     }
@@ -312,7 +367,6 @@
     const callEndBtn = document.getElementById('call-end-btn');
     const callAnswerBtn = document.getElementById('call-answer-btn');
 
-    // Обработчики входящих событий (устанавливаются после старта сокета)
     function initWebRTC() {
         socket.on('incoming_call', (data) => {
             callOverlay.style.display = 'block';
@@ -433,10 +487,6 @@
         if (socket) socket.emit('hangup', { roomId: window.currentRoomId || '1' });
     }
     callEndBtn.onclick = endCall;
-
-    // Инициализация WebRTC после подключения сокета (вызывается в startApp)
-    // Но чтобы не ждать, добавим вызов после создания сокета
-    // В startApp мы добавим initWebRTC()
 </script>
 </body>
 </html>
