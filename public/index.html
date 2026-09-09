@@ -6,65 +6,36 @@
     <title>Lingle Chat</title>
     <link rel="manifest" href="/manifest.json">
     <style>
-        /* Переменные для тем */
-        :root {
-            --bg: #f0f0f0;
-            --text: #222;
-            --header-bg: #e0e0e0;
-            --border: #ccc;
-            --chat-bg: #e9e9e9;
-            --input-bg: #fff;
-            --accent: #4CAF50;
-            --msg-self-bg: #d1e7dd;
-            --msg-other-bg: #fff;
-        }
-
-        body.dark {
-            --bg: #121212;
-            --text: #eee;
-            --header-bg: #1e1e1e;
-            --border: #333;
-            --chat-bg: #181818;
-            --input-bg: #2a2a2a;
-            --accent: #4CAF50;
-            --msg-self-bg: #2e4d3a;
-            --msg-other-bg: #2a2a2a;
-        }
-
+        :root { --bg: #f0f0f0; --text: #222; --header-bg: #e0e0e0; --border: #ccc; --chat-bg: #e9e9e9; --input-bg: #fff; --accent: #4CAF50; --msg-self-bg: #d1e7dd; --msg-other-bg: #fff; }
+        body.dark { --bg: #121212; --text: #eee; --header-bg: #1e1e1e; --border: #333; --chat-bg: #181818; --input-bg: #2a2a2a; --accent: #4CAF50; --msg-self-bg: #2e4d3a; --msg-other-bg: #2a2a2a; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: var(--bg); color: var(--text); transition: 0.3s; }
-
-        /* Экран входа */
-        #auth-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        #auth-box { width: 300px; background: var(--input-bg); border: 2px solid var(--border); padding: 20px; border-radius: 5px; }
-        #auth-box h2 { text-align: center; margin-bottom: 15px; }
-        #auth-box input { width: 100%; margin-bottom: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 3px; background: var(--input-bg); color: var(--text); }
-        #auth-box button { width: 100%; padding: 10px; background: var(--accent); color: white; border: none; cursor: pointer; font-size: 16px; }
-        #auth-box .toggle { background: none; border: none; color: #0000EE; text-decoration: underline; margin-top: 10px; cursor: pointer; }
-        #auth-box .error { color: red; font-size: 14px; margin-bottom: 10px; }
-
-        /* Список чатов */
+        #auth-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; padding: 20px; }
+        #auth-box { width: 320px; background: var(--input-bg); border: 2px solid var(--border); padding: 25px; border-radius: 8px; }
+        #auth-box h2 { text-align: center; margin-bottom: 20px; }
+        #auth-box input { width: 100%; margin-bottom: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); }
+        #auth-box button { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        #auth-box .toggle { background: none; border: none; color: #0000EE; text-decoration: underline; margin-top: 10px; cursor: pointer; width: 100%; }
+        #code-section { display: none; margin-top: 15px; }
+        #captcha-box { background: var(--bg); padding: 10px; border: 1px solid var(--border); margin-bottom: 10px; text-align: center; font-weight: bold; font-size: 18px; }
+        #captcha-input { margin-bottom: 12px; }
+        #error-msg { color: red; margin-bottom: 10px; }
         #chats-container { display: none; flex-direction: column; height: 100vh; }
-        #chats-header { background: var(--header-bg); padding: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
-        #chats-header h2 { font-size: 18px; flex: 1; }
-        #search-users { padding: 5px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); }
-
-        #theme-btn { background: none; border: 1px solid var(--border); padding: 5px 10px; margin-left: 8px; cursor: pointer; color: var(--text); font-size: 14px; }
-
+        #chats-header { background: var(--header-bg); padding: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+        #chats-header h2 { flex: 1; font-size: 18px; }
+        #search-users { flex: 2; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--text); }
+        #theme-btn { padding: 6px 10px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); cursor: pointer; }
         #chat-list { flex: 1; overflow-y: auto; }
-        .chat-item { padding: 12px; border-bottom: 1px solid var(--border); background: var(--input-bg); cursor: pointer; }
+        .chat-item { padding: 12px; border-bottom: 1px solid var(--border); background: var(--input-bg); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         .chat-item:hover { background: var(--header-bg); }
-        .chat-item .info h4 { margin-bottom: 4px; font-size: 16px; }
-        .chat-item .info p { color: var(--text); font-size: 14px; opacity: 0.7; }
-
-        /* Окно переписки */
+        .chat-item .info h4 { margin-bottom: 4px; }
+        .chat-item .info p { font-size: 14px; opacity: 0.7; }
         #chat-window { display: none; flex-direction: column; height: 100vh; }
-        #chat-header { background: var(--header-bg); padding: 8px; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
-        #chat-header .back { background: none; border: none; font-size: 14px; margin-right: 10px; cursor: pointer; color: var(--text); }
-        #chat-header .name { font-weight: bold; flex: 1; }
+        #chat-header { background: var(--header-bg); padding: 8px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+        #chat-header .back { background: none; border: none; font-size: 14px; cursor: pointer; color: var(--text); }
+        #chat-header .name { flex: 1; font-weight: bold; }
         #chat-header .call-btns { display: flex; gap: 5px; }
-        #chat-header .call-btns button { background: none; border: 1px solid var(--border); padding: 5px 8px; cursor: pointer; color: var(--text); font-size: 14px; }
-
+        #chat-header .call-btns button { padding: 5px 10px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); cursor: pointer; }
         #messages { flex: 1; padding: 10px; overflow-y: auto; background: var(--chat-bg); }
         .msg { display: flex; margin-bottom: 8px; }
         .msg-content { padding: 8px 12px; border-radius: 0; max-width: 80%; word-wrap: break-word; }
@@ -75,12 +46,9 @@
         .msg .username { font-size: 12px; opacity: 0.7; display: block; margin-bottom: 2px; }
         .msg .text { font-size: 15px; }
         .msg .time { font-size: 11px; opacity: 0.6; float: right; margin-top: 4px; margin-left: 8px; }
-
         #input-area { display: flex; padding: 10px; background: var(--header-bg); border-top: 1px solid var(--border); }
         #msgInput { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 0; background: var(--input-bg); color: var(--text); }
         #sendBtn { padding: 8px 15px; background: var(--accent); color: white; border: none; margin-left: 5px; cursor: pointer; }
-
-        /* Окно звонка */
         #call-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
         #call-box { background: var(--input-bg); width: 300px; margin: 50px auto; padding: 20px; text-align: center; border-radius: 5px; color: var(--text); }
         #call-box video { width: 100%; max-height: 150px; background: #000; }
@@ -91,22 +59,27 @@
         #call-box .btn-answer { background: green; color: white; border: none; }
     </style>
 </head>
-<body class="light">
+<body>
 <div id="app">
-    <!-- Вход / Регистрация -->
     <div id="auth-container">
         <div id="auth-box">
             <h2 id="auth-title">Lingle</h2>
             <input type="text" id="auth-login" placeholder="Логин или Email">
             <input type="password" id="auth-password" placeholder="Пароль">
-            <input type="text" id="reg-username" placeholder="Имя пользователя" style="display: none;">
-            <div class="error" id="auth-error"></div>
+            <input type="text" id="reg-username" placeholder="Имя пользователя" style="display:none;">
+            <div id="error-msg"></div>
             <button id="auth-btn">Войти</button>
             <button class="toggle" id="auth-toggle">Нет аккаунта? Зарегистрироваться</button>
+            <div id="code-section">
+                <p>Введите код из письма:</p>
+                <input type="text" id="code-input" placeholder="Код">
+                <div id="captcha-box"></div>
+                <input type="text" id="captcha-input" placeholder="Ответ на пример">
+                <button id="confirm-btn">Подтвердить</button>
+                <button class="toggle" id="resend-btn" style="margin-top:5px;">Отправить код ещё раз</button>
+            </div>
         </div>
     </div>
-
-    <!-- Список чатов -->
     <div id="chats-container">
         <div id="chats-header">
             <h2>Чаты</h2>
@@ -115,11 +88,9 @@
         </div>
         <div id="chat-list"></div>
     </div>
-
-    <!-- Окно переписки -->
     <div id="chat-window">
         <div id="chat-header">
-            <button class="back" id="backBtn">Назад</button>
+            <button class="back" id="backBtn">←</button>
             <span class="name" id="current-chat-name">Чат</span>
             <div class="call-btns">
                 <button id="audio-call-btn">Аудио</button>
@@ -133,8 +104,6 @@
             <button id="sendBtn">Отпр.</button>
         </div>
     </div>
-
-    <!-- Звонок -->
     <div id="call-overlay">
         <div id="call-box">
             <video id="remote-video" autoplay playsinline></video>
@@ -147,47 +116,47 @@
         </div>
     </div>
 </div>
-
 <script src="/socket.io/socket.io.js"></script>
 <script>
-    // ================== ТЕМА ==================
+    // ===== ТЕМА =====
     const themeBtn = document.getElementById('theme-btn');
     const themeBtn2 = document.getElementById('theme-btn-2');
-
-    function getTheme() {
-        return localStorage.getItem('theme') || 'light';
-    }
-
-    function applyTheme(theme) {
-        document.body.className = theme;
-        localStorage.setItem('theme', theme);
-    }
-
-    // При загрузке применяем сохранённую тему
+    function getTheme() { return localStorage.getItem('theme') || 'light'; }
+    function applyTheme(theme) { document.body.className = theme; localStorage.setItem('theme', theme); }
     applyTheme(getTheme());
-
-    function toggleTheme() {
-        const current = getTheme();
-        const next = current === 'light' ? 'dark' : 'light';
-        applyTheme(next);
-    }
-
+    function toggleTheme() { const current = getTheme(); applyTheme(current === 'light' ? 'dark' : 'light'); }
     themeBtn.addEventListener('click', toggleTheme);
     themeBtn2.addEventListener('click', toggleTheme);
 
-    // ================== АВТОРИЗАЦИЯ ==================
+    // ===== АВТОРИЗАЦИЯ =====
     const authContainer = document.getElementById('auth-container');
     const authLogin = document.getElementById('auth-login');
     const authPassword = document.getElementById('auth-password');
     const regUsername = document.getElementById('reg-username');
     const authBtn = document.getElementById('auth-btn');
     const authToggle = document.getElementById('auth-toggle');
-    const authError = document.getElementById('auth-error');
+    const errorMsg = document.getElementById('error-msg');
     const authTitle = document.getElementById('auth-title');
+    const codeSection = document.getElementById('code-section');
+    const codeInput = document.getElementById('code-input');
+    const captchaBox = document.getElementById('captcha-box');
+    const captchaInput = document.getElementById('captcha-input');
+    const confirmBtn = document.getElementById('confirm-btn');
+    const resendBtn = document.getElementById('resend-btn');
 
     let isLoginMode = true;
     let socket = null;
     let currentUserId = null;
+    let captchaAnswer = 0;
+    let pendingRegistration = null;
+
+    function generateCaptcha() {
+        const a = Math.floor(Math.random() * 10) + 1;
+        const b = Math.floor(Math.random() * 10) + 1;
+        captchaAnswer = a + b;
+        captchaBox.textContent = `${a} + ${b} = ?`;
+        captchaInput.value = '';
+    }
 
     authToggle.onclick = () => {
         isLoginMode = !isLoginMode;
@@ -196,67 +165,94 @@
             authBtn.textContent = 'Войти';
             regUsername.style.display = 'none';
             authToggle.textContent = 'Нет аккаунта? Зарегистрироваться';
+            codeSection.style.display = 'none';
+            errorMsg.textContent = '';
         } else {
             authTitle.textContent = 'Регистрация Lingle';
             authBtn.textContent = 'Зарегистрироваться';
             regUsername.style.display = 'block';
             authToggle.textContent = 'Уже есть аккаунт? Войти';
+            errorMsg.textContent = '';
         }
-        authError.textContent = '';
     };
 
     authBtn.onclick = async () => {
         const login = authLogin.value.trim();
         const password = authPassword.value.trim();
         const username = regUsername.value.trim();
-        if (!login || !password) return authError.textContent = 'Заполните поля!';
-        if (!isLoginMode && !username) return authError.textContent = 'Придумайте имя!';
+        errorMsg.textContent = '';
 
-        const url = isLoginMode ? '/api/login' : '/api/register';
-        const body = isLoginMode ? { login, password } : { email: login, password, username };
+        if (!login || !password) { errorMsg.textContent = 'Заполните все поля!'; return; }
 
-        try {
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Ошибка');
-            localStorage.setItem('token', data.token);
-            startApp();
-        } catch (err) {
-            authError.textContent = err.message;
+        if (isLoginMode) {
+            try {
+                const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login, password }) });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Ошибка входа');
+                localStorage.setItem('token', data.token);
+                startApp();
+            } catch (err) { errorMsg.textContent = err.message; }
+        } else {
+            if (!username) { errorMsg.textContent = 'Придумайте имя пользователя!'; return; }
+            const email = login;
+            try {
+                const res = await fetch('/api/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Ошибка отправки кода');
+                pendingRegistration = { email, username, password };
+                codeSection.style.display = 'block';
+                authBtn.style.display = 'none';
+                authToggle.style.display = 'none';
+                generateCaptcha();
+                alert('Код отправлен на вашу почту!');
+            } catch (err) { errorMsg.textContent = err.message; }
         }
     };
 
-    // ================== ЗАПУСК ПРИЛОЖЕНИЯ ==================
+    confirmBtn.onclick = async () => {
+        const code = codeInput.value.trim();
+        const captcha = captchaInput.value.trim();
+        if (!code || !captcha) { errorMsg.textContent = 'Введите код и ответ на капчу!'; return; }
+        if (parseInt(captcha) !== captchaAnswer) { errorMsg.textContent = 'Неверный ответ на капчу'; generateCaptcha(); return; }
+        if (!pendingRegistration) { errorMsg.textContent = 'Нет данных для подтверждения'; return; }
+        try {
+            const res = await fetch('/api/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: pendingRegistration.email, code, username: pendingRegistration.username, password: pendingRegistration.password }) });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Ошибка подтверждения');
+            localStorage.setItem('token', data.token);
+            startApp();
+        } catch (err) { errorMsg.textContent = err.message; generateCaptcha(); }
+    };
+
+    resendBtn.onclick = async () => {
+        if (!pendingRegistration) return;
+        try {
+            const res = await fetch('/api/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: pendingRegistration.email }) });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Ошибка');
+            alert('Код отправлен повторно!');
+        } catch (err) { errorMsg.textContent = err.message; }
+    };
+
+    // ===== ЗАПУСК =====
     function startApp() {
         authContainer.style.display = 'none';
         document.getElementById('chats-container').style.display = 'flex';
-
         const token = localStorage.getItem('token');
         socket = io({ auth: { token } });
-
         socket.on('your_id', (id) => { currentUserId = id; });
         loadChats();
-
         socket.on('receive_message', (msg) => {
-            if (document.getElementById('chat-window').style.display !== 'none') {
-                addMessage(msg);
-            }
+            if (document.getElementById('chat-window').style.display !== 'none') addMessage(msg);
             loadChats();
         });
-
         initWebRTC();
     }
 
-    // ================== СПИСОК ЧАТОВ ==================
+    // ===== СПИСОК ЧАТОВ =====
     async function loadChats() {
         const token = localStorage.getItem('token');
-        const res = await fetch('/api/my-chats', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
+        const res = await fetch('/api/my-chats', { headers: { 'Authorization': 'Bearer ' + token } });
         const chats = await res.json();
         renderChats(chats);
     }
@@ -267,56 +263,38 @@
         chats.forEach(chat => {
             const div = document.createElement('div');
             div.className = 'chat-item';
-            div.innerHTML = `
-                <div class="info">
-                    <h4>${chat.target_username}</h4>
-                    <p>${chat.last_message || 'Начните чат...'}</p>
-                </div>
-            `;
+            div.innerHTML = `<div class="info"><h4>${chat.target_username}</h4><p>${chat.last_message || 'Начните чат...'}</p></div>`;
             div.onclick = () => openChat(chat.chat_room_id, chat.target_user_id, chat.target_username);
             list.appendChild(div);
         });
     }
 
-    // ================== ОТКРЫТИЕ ЧАТА ==================
+    // ===== ОТКРЫТИЕ ЧАТА =====
     function openChat(roomId, targetId, targetUsername) {
         document.getElementById('chats-container').style.display = 'none';
         document.getElementById('chat-window').style.display = 'flex';
         document.getElementById('current-chat-name').textContent = targetUsername;
         document.getElementById('messages').innerHTML = '';
-
         socket.emit('join_room', roomId, targetId, targetUsername);
-        socket.once('load_history', (msgs) => {
-            msgs.forEach(addMessage);
-        });
-
+        socket.once('load_history', (msgs) => msgs.forEach(addMessage));
         window.currentRoomId = roomId;
         window.currentTargetId = targetId;
     }
 
-    // ================== НАЗАД К СПИСКУ ==================
+    // ===== НАЗАД =====
     document.getElementById('backBtn').onclick = () => {
         document.getElementById('chat-window').style.display = 'none';
         document.getElementById('chats-container').style.display = 'flex';
         loadChats();
     };
 
-    // ================== СООБЩЕНИЯ ==================
+    // ===== СООБЩЕНИЯ =====
     function addMessage(msg) {
         const div = document.createElement('div');
         div.className = `msg ${socket && msg.user_id === socket.userId ? 'self' : 'other'}`;
         let timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        if (msg.time) {
-            const date = new Date(msg.time);
-            if (!isNaN(date)) timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        div.innerHTML = `
-            <div class="msg-content">
-                <span class="username">${msg.username}</span>
-                <div class="text">${msg.text}</div>
-                <span class="time">${timeStr}</span>
-            </div>
-        `;
+        if (msg.time) { const date = new Date(msg.time); if (!isNaN(date)) timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+        div.innerHTML = `<div class="msg-content"><span class="username">${msg.username}</span><div class="text">${msg.text}</div><span class="time">${timeStr}</span></div>`;
         document.getElementById('messages').appendChild(div);
         document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     }
@@ -327,21 +305,15 @@
         socket.emit('send_message', { roomId: window.currentRoomId, text });
         document.getElementById('msgInput').value = '';
     };
-    document.getElementById('msgInput').onkeypress = (e) => {
-        if (e.key === 'Enter') document.getElementById('sendBtn').click();
-    };
+    document.getElementById('msgInput').onkeypress = (e) => { if (e.key === 'Enter') document.getElementById('sendBtn').click(); };
 
-    // ================== ПОИСК ПОЛЬЗОВАТЕЛЕЙ ==================
+    // ===== ПОИСК =====
     document.getElementById('search-users').addEventListener('input', async (e) => {
         const query = e.target.value.trim();
         if (query.length < 1) return loadChats();
-
         const token = localStorage.getItem('token');
-        const res = await fetch(`/api/search-users?q=${encodeURIComponent(query)}`, {
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
+        const res = await fetch(`/api/search-users?q=${encodeURIComponent(query)}`, { headers: { 'Authorization': 'Bearer ' + token } });
         const users = await res.json();
-
         const list = document.getElementById('chat-list');
         list.innerHTML = '';
         users.forEach(user => {
@@ -358,7 +330,7 @@
         });
     });
 
-    // ================== ЗВОНКИ (WebRTC) ==================
+    // ===== ЗВОНКИ =====
     let pc = null, localStream = null, remoteSocketId = null, isCaller = false;
     const callOverlay = document.getElementById('call-overlay');
     const callStatus = document.getElementById('call-status');
@@ -375,21 +347,11 @@
             remoteSocketId = data.from;
             window.pendingOffer = data.offer;
         });
-
         socket.on('call_answered', (data) => {
-            pc.setRemoteDescription(data.answer).then(() => {
-                callStatus.textContent = 'Разговор идёт...';
-            });
+            pc.setRemoteDescription(data.answer).then(() => { callStatus.textContent = 'Разговор идёт...'; });
         });
-
-        socket.on('ice_candidate', (candidate) => {
-            if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate));
-        });
-
-        socket.on('call_ended', () => {
-            endCall();
-            alert('Звонок завершён');
-        });
+        socket.on('ice_candidate', (candidate) => { if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate)); });
+        socket.on('call_ended', () => { endCall(); alert('Звонок завершён'); });
     }
 
     function initiateCall(useVideo) {
@@ -398,81 +360,35 @@
         callOverlay.style.display = 'block';
         callStatus.textContent = 'Исходящий звонок...';
         callAnswerBtn.style.display = 'none';
-
         navigator.mediaDevices.getUserMedia({ audio: true, video: useVideo })
             .then(stream => {
-                localStream = stream;
-                localVideo.srcObject = stream;
+                localStream = stream; localVideo.srcObject = stream;
                 localVideo.style.display = useVideo ? 'block' : 'none';
-
-                pc = new RTCPeerConnection({
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
-                    ]
-                });
-
+                pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }] });
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-                pc.onicecandidate = (e) => {
-                    if (e.candidate && remoteSocketId) {
-                        socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate });
-                    }
-                };
-                pc.ontrack = (e) => {
-                    remoteVideo.srcObject = e.streams[0];
-                };
-
+                pc.onicecandidate = (e) => { if (e.candidate && remoteSocketId) socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate }); };
+                pc.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
                 pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
                     socket.emit('call_user', { targetRoomId: window.currentRoomId || '1', offer: pc.localDescription });
                 });
-            })
-            .catch(err => {
-                alert('Нет доступа к камере/микрофону');
-                endCall();
-            });
+            }).catch(err => { alert('Нет доступа к камере/микрофону'); endCall(); });
     }
 
     callAnswerBtn.onclick = () => {
         callAnswerBtn.style.display = 'none';
         callStatus.textContent = 'Соединение...';
-
         navigator.mediaDevices.getUserMedia({ audio: true, video: true })
             .then(stream => {
-                localStream = stream;
-                localVideo.srcObject = stream;
-                localVideo.style.display = 'block';
-
-                pc = new RTCPeerConnection({
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
-                    ]
-                });
-
+                localStream = stream; localVideo.srcObject = stream; localVideo.style.display = 'block';
+                pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }] });
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-                pc.onicecandidate = (e) => {
-                    if (e.candidate && remoteSocketId) {
-                        socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate });
-                    }
-                };
-                pc.ontrack = (e) => {
-                    remoteVideo.srcObject = e.streams[0];
-                };
-
-                pc.setRemoteDescription(window.pendingOffer)
-                    .then(() => pc.createAnswer())
-                    .then(answer => pc.setLocalDescription(answer))
-                    .then(() => {
-                        socket.emit('answer_call', { targetId: remoteSocketId, answer: pc.localDescription });
-                        callStatus.textContent = 'Разговор идёт...';
-                    });
-            })
-            .catch(err => {
-                alert('Не удалось получить доступ к камере/микрофону');
-                endCall();
-            });
+                pc.onicecandidate = (e) => { if (e.candidate && remoteSocketId) socket.emit('ice_candidate', { targetId: remoteSocketId, candidate: e.candidate }); };
+                pc.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
+                pc.setRemoteDescription(window.pendingOffer).then(() => pc.createAnswer()).then(answer => pc.setLocalDescription(answer)).then(() => {
+                    socket.emit('answer_call', { targetId: remoteSocketId, answer: pc.localDescription });
+                    callStatus.textContent = 'Разговор идёт...';
+                });
+            }).catch(err => { alert('Не удалось получить доступ к камере/микрофону'); endCall(); });
     };
 
     document.getElementById('audio-call-btn').onclick = () => initiateCall(false);
@@ -482,8 +398,7 @@
         if (pc) { pc.close(); pc = null; }
         if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
         callOverlay.style.display = 'none';
-        localVideo.srcObject = null;
-        remoteVideo.srcObject = null;
+        localVideo.srcObject = null; remoteVideo.srcObject = null;
         if (socket) socket.emit('hangup', { roomId: window.currentRoomId || '1' });
     }
     callEndBtn.onclick = endCall;
