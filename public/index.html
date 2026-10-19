@@ -16,17 +16,15 @@
         #auth-box input { width: 100%; margin-bottom: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); }
         #auth-box button { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
         #auth-box .toggle { background: none; border: none; color: #0000EE; text-decoration: underline; margin-top: 10px; cursor: pointer; width: 100%; }
-        #code-section { display: none; margin-top: 15px; }
         #captcha-box { background: var(--bg); padding: 10px; border: 1px solid var(--border); margin-bottom: 10px; text-align: center; font-weight: bold; font-size: 18px; }
-        #captcha-input { margin-bottom: 12px; }
-        #error-msg { color: red; margin-bottom: 10px; }
+        #error-msg { color: red; margin-bottom: 10px; font-size: 14px; }
         #chats-container { display: none; flex-direction: column; height: 100vh; }
         #chats-header { background: var(--header-bg); padding: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
         #chats-header h2 { flex: 1; font-size: 18px; }
         #search-users { flex: 2; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--text); }
         #theme-btn { padding: 6px 10px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); cursor: pointer; }
         #chat-list { flex: 1; overflow-y: auto; }
-        .chat-item { padding: 12px; border-bottom: 1px solid var(--border); background: var(--input-bg); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .chat-item { padding: 12px; border-bottom: 1px solid var(--border); background: var(--input-bg); cursor: pointer; }
         .chat-item:hover { background: var(--header-bg); }
         .chat-item .info h4 { margin-bottom: 4px; }
         .chat-item .info p { font-size: 14px; opacity: 0.7; }
@@ -67,19 +65,14 @@
             <input type="text" id="auth-login" placeholder="Логин или Email">
             <input type="password" id="auth-password" placeholder="Пароль">
             <input type="text" id="reg-username" placeholder="Имя пользователя" style="display:none;">
+            <div id="captcha-box"></div>
+            <input type="text" id="captcha-input" placeholder="Ответ на пример">
             <div id="error-msg"></div>
             <button id="auth-btn">Войти</button>
             <button class="toggle" id="auth-toggle">Нет аккаунта? Зарегистрироваться</button>
-            <div id="code-section">
-                <p>Введите код из письма:</p>
-                <input type="text" id="code-input" placeholder="Код">
-                <div id="captcha-box"></div>
-                <input type="text" id="captcha-input" placeholder="Ответ на пример">
-                <button id="confirm-btn">Подтвердить</button>
-                <button class="toggle" id="resend-btn" style="margin-top:5px;">Отправить код ещё раз</button>
-            </div>
         </div>
     </div>
+
     <div id="chats-container">
         <div id="chats-header">
             <h2>Чаты</h2>
@@ -88,6 +81,7 @@
         </div>
         <div id="chat-list"></div>
     </div>
+
     <div id="chat-window">
         <div id="chat-header">
             <button class="back" id="backBtn">←</button>
@@ -95,7 +89,6 @@
             <div class="call-btns">
                 <button id="audio-call-btn">Аудио</button>
                 <button id="video-call-btn">Видео</button>
-                <button id="theme-btn-2">Тема</button>
             </div>
         </div>
         <div id="messages"></div>
@@ -104,6 +97,7 @@
             <button id="sendBtn">Отпр.</button>
         </div>
     </div>
+
     <div id="call-overlay">
         <div id="call-box">
             <video id="remote-video" autoplay playsinline></video>
@@ -116,17 +110,15 @@
         </div>
     </div>
 </div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
     // ===== ТЕМА =====
     const themeBtn = document.getElementById('theme-btn');
-    const themeBtn2 = document.getElementById('theme-btn-2');
     function getTheme() { return localStorage.getItem('theme') || 'light'; }
     function applyTheme(theme) { document.body.className = theme; localStorage.setItem('theme', theme); }
     applyTheme(getTheme());
-    function toggleTheme() { const current = getTheme(); applyTheme(current === 'light' ? 'dark' : 'light'); }
-    themeBtn.addEventListener('click', toggleTheme);
-    themeBtn2.addEventListener('click', toggleTheme);
+    themeBtn.addEventListener('click', () => { applyTheme(getTheme() === 'light' ? 'dark' : 'light'); });
 
     // ===== АВТОРИЗАЦИЯ =====
     const authContainer = document.getElementById('auth-container');
@@ -137,18 +129,13 @@
     const authToggle = document.getElementById('auth-toggle');
     const errorMsg = document.getElementById('error-msg');
     const authTitle = document.getElementById('auth-title');
-    const codeSection = document.getElementById('code-section');
-    const codeInput = document.getElementById('code-input');
     const captchaBox = document.getElementById('captcha-box');
     const captchaInput = document.getElementById('captcha-input');
-    const confirmBtn = document.getElementById('confirm-btn');
-    const resendBtn = document.getElementById('resend-btn');
 
     let isLoginMode = true;
     let socket = null;
     let currentUserId = null;
     let captchaAnswer = 0;
-    let pendingRegistration = null;
 
     function generateCaptcha() {
         const a = Math.floor(Math.random() * 10) + 1;
@@ -158,23 +145,32 @@
         captchaInput.value = '';
     }
 
+    generateCaptcha();
+
     authToggle.onclick = () => {
         isLoginMode = !isLoginMode;
+        errorMsg.textContent = '';
         if (isLoginMode) {
             authTitle.textContent = 'Lingle';
             authBtn.textContent = 'Войти';
             regUsername.style.display = 'none';
+            captchaBox.style.display = 'none';
+            captchaInput.style.display = 'none';
             authToggle.textContent = 'Нет аккаунта? Зарегистрироваться';
-            codeSection.style.display = 'none';
-            errorMsg.textContent = '';
         } else {
             authTitle.textContent = 'Регистрация Lingle';
             authBtn.textContent = 'Зарегистрироваться';
             regUsername.style.display = 'block';
+            captchaBox.style.display = 'block';
+            captchaInput.style.display = 'block';
             authToggle.textContent = 'Уже есть аккаунт? Войти';
-            errorMsg.textContent = '';
+            generateCaptcha();
         }
     };
+
+    // при первой загрузке (режим входа) скрываем капчу
+    captchaBox.style.display = 'none';
+    captchaInput.style.display = 'none';
 
     authBtn.onclick = async () => {
         const login = authLogin.value.trim();
@@ -185,53 +181,43 @@
         if (!login || !password) { errorMsg.textContent = 'Заполните все поля!'; return; }
 
         if (isLoginMode) {
+            // Вход
             try {
-                const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login, password }) });
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login, password })
+                });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Ошибка входа');
                 localStorage.setItem('token', data.token);
                 startApp();
             } catch (err) { errorMsg.textContent = err.message; }
         } else {
-            if (!username) { errorMsg.textContent = 'Придумайте имя пользователя!'; return; }
-            const email = login;
-            try {
-                const res = await fetch('/api/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Ошибка отправки кода');
-                pendingRegistration = { email, username, password };
-                codeSection.style.display = 'block';
-                authBtn.style.display = 'none';
-                authToggle.style.display = 'none';
+            // Регистрация с проверкой капчи
+            if (!username) { errorMsg.textContent = 'Придумайте имя!'; return; }
+            const captcha = captchaInput.value.trim();
+            if (parseInt(captcha) !== captchaAnswer) {
+                errorMsg.textContent = 'Неверный ответ на капчу';
                 generateCaptcha();
-                alert('Код отправлен на вашу почту!');
-            } catch (err) { errorMsg.textContent = err.message; }
+                return;
+            }
+            const email = login; // используем введённый логин как email (или просто как идентификатор)
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Ошибка регистрации');
+                localStorage.setItem('token', data.token);
+                startApp();
+            } catch (err) {
+                errorMsg.textContent = err.message;
+                generateCaptcha();
+            }
         }
-    };
-
-    confirmBtn.onclick = async () => {
-        const code = codeInput.value.trim();
-        const captcha = captchaInput.value.trim();
-        if (!code || !captcha) { errorMsg.textContent = 'Введите код и ответ на капчу!'; return; }
-        if (parseInt(captcha) !== captchaAnswer) { errorMsg.textContent = 'Неверный ответ на капчу'; generateCaptcha(); return; }
-        if (!pendingRegistration) { errorMsg.textContent = 'Нет данных для подтверждения'; return; }
-        try {
-            const res = await fetch('/api/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: pendingRegistration.email, code, username: pendingRegistration.username, password: pendingRegistration.password }) });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Ошибка подтверждения');
-            localStorage.setItem('token', data.token);
-            startApp();
-        } catch (err) { errorMsg.textContent = err.message; generateCaptcha(); }
-    };
-
-    resendBtn.onclick = async () => {
-        if (!pendingRegistration) return;
-        try {
-            const res = await fetch('/api/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: pendingRegistration.email }) });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Ошибка');
-            alert('Код отправлен повторно!');
-        } catch (err) { errorMsg.textContent = err.message; }
     };
 
     // ===== ЗАПУСК =====
@@ -281,7 +267,6 @@
         window.currentTargetId = targetId;
     }
 
-    // ===== НАЗАД =====
     document.getElementById('backBtn').onclick = () => {
         document.getElementById('chat-window').style.display = 'none';
         document.getElementById('chats-container').style.display = 'flex';
