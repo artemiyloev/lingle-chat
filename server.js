@@ -4,8 +4,6 @@ const socketIo = require('socket.io');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -16,17 +14,6 @@ app.use(express.json());
 
 const SECRET_KEY = 'lingle_secret_2026';
 const db = new Database('db.sqlite');
-
-// --- Настройки почты (замени на свои SMTP) ---
-const transporter = nodemailer.createTransport({
-  host: 'smtp.mail.ru', // smtp.yandex.ru / smtp.gmail.com
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.SMTP_USER, // твой email
-    pass: process.env.SMTP_PASS  // пароль приложения
-  }
-});
 
 // --- Таблицы ---
 db.exec(`
@@ -55,76 +42,25 @@ db.exec(`
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, chat_room_id)
   );
-  CREATE TABLE IF NOT EXISTS verification_codes (
-    email TEXT PRIMARY KEY,
-    code TEXT NOT NULL,
-    expires_at INTEGER NOT NULL
-  );
 `);
 
-// --- Генерация кода ---
-function generateCode() {
-  return crypto.randomInt(100000, 999999).toString();
-}
-
-async function sendVerificationEmail(email, code) {
-  await transporter.sendMail({
-    from: `"Lingle" <${process.env.SMTP_USER}>`,
-    to: email,
-    subject: 'Код подтверждения Lingle',
-    text: `Ваш код подтверждения: ${code}`
-  });
-}
-
-// --- Отправка кода ---
-app.post('/api/send-code', async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email не указан' });
-
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-  if (existing) return res.status(409).json({ error: 'Этот email уже зарегистрирован' });
-
-  const code = generateCode();
-  const expiresAt = Date.now() + 5 * 60 * 1000;
-
-  db.prepare(`
-    INSERT INTO verification_codes (email, code, expires_at) 
-    VALUES (?, ?, ?)
-    ON CONFLICT(email) DO UPDATE SET code = excluded.code, expires_at = excluded.expires_at
-  `).run(email, code, expiresAt);
-
-  try {
-    await sendVerificationEmail(email, code);
-    res.json({ success: true, message: 'Код отправлен на почту' });
-  } catch (err) {
-    console.error('Ошибка отправки письма:', err.message);
-    res.status(500).json({ error: 'Не удалось отправить письмо. Проверьте SMTP-настройки.' });
-  }
-});
-
-// --- Подтверждение кода ---
-app.post('/api/verify-code', (req, res) => {
-  const { email, code, username, password } = req.body;
-  if (!email || !code || !username || !password) {
+// --- Регистрация (простая, без почты) ---
+app.post('/api/register', (req, res) => {
+  const { username, email, password } = req.body;
+  if (!username || !email || !password) {
     return res.status(400).json({ error: 'Заполните все поля' });
   }
 
-  const record = db.prepare('SELECT * FROM verification_codes WHERE email = ?').get(email);
-  if (!record) return res.status(400).json({ error: 'Код не запрашивался' });
-  if (record.code !== code) return res.status(400).json({ error: 'Неверный код' });
-  if (Date.now() > record.expires_at) {
-    db.prepare('DELETE FROM verification_codes WHERE email = ?').run(email);
-    return res.status(400).json({ error: 'Код истёк, запросите новый' });
-  }
-
-  const hash = bcrypt.hashSync(password, 10);
   try {
+    const existing = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
+    if (existing) return res.status(409).json({ error: 'Почта или имя уже заняты' });
+
+    const hash = bcrypt.hashSync(password, 10);
     const info = db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)').run(username, email, hash);
-    db.prepare('DELETE FROM verification_codes WHERE email = ?').run(email);
     const token = jwt.sign({ userId: info.lastInsertRowid, username }, SECRET_KEY, { expiresIn: '7d' });
     res.json({ token, user: { id: info.lastInsertRowid, username, email } });
   } catch (err) {
-    res.status(500).json({ error: 'Ошибка создания пользователя' });
+    res.status(500).json({ error: 'Ошибка регистрации' });
   }
 });
 
@@ -152,8 +88,7 @@ app.get('/api/my-chats', (req, res) => {
 
   try {
     const decoded = jwt.verify(token, SECRET_KEY);
-    const userId = decoded.userId;
-    const chats = db.prepare('SELECT * FROM user_chats WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
+    const chats = db.prepare('SELECT * FROM user_chats WHERE user_id = ? ORDER BY updated_at DESC').all(decoded.userId);
     res.json(chats);
   } catch (err) {
     res.status(500).json({ error: 'Ошибка загрузки диалогов' });
@@ -167,7 +102,6 @@ app.get('/api/search-users', (req, res) => {
 
   try {
     const decoded = jwt.verify(token, SECRET_KEY);
-    const userId = decoded.userId;
     const query = req.query.q;
     if (!query) return res.json([]);
 
@@ -175,7 +109,7 @@ app.get('/api/search-users', (req, res) => {
       SELECT id, username, email FROM users 
       WHERE (username LIKE ? OR email LIKE ? OR id LIKE ?) AND id != ?
       LIMIT 20
-    `).all(`%${query}%`, `%${query}%`, `%${query}%`, userId);
+    `).all(`%${query}%`, `%${query}%`, `%${query}%`, decoded.userId);
 
     res.json(users);
   } catch (err) {
@@ -217,7 +151,7 @@ io.on('connection', (socket) => {
           VALUES (?, ?, ?, ?)
           ON CONFLICT(user_id, chat_room_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
         `).run(currentUserId, roomId, targetUserId, targetUsername);
-      } catch (e) { /* Игнорируем */ }
+      } catch (e) {}
     }
 
     const rows = db.prepare('SELECT * FROM room_messages WHERE room_id = ? ORDER BY time ASC LIMIT 50').all(roomId);
@@ -233,7 +167,7 @@ io.on('connection', (socket) => {
     io.to(`room_${roomId}`).emit('receive_message', savedMsg);
   });
 
-  // Звонки
+  // --- Звонки ---
   socket.on('call_user', (data) => {
     socket.to(`room_${data.targetRoomId}`).emit('incoming_call', { from: socket.id, fromUsername: currentUsername, offer: data.offer });
   });
@@ -252,4 +186,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('✅ Lingle полностью работает!')); 
+server.listen(PORT, () => console.log('✅ Lingle работает (без почты, с капчей)!'));
