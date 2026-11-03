@@ -4,6 +4,9 @@ const socketIo = require('socket.io');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,6 +17,27 @@ app.use(express.json());
 
 const SECRET_KEY = 'lingle_secret_2026';
 const db = new Database('db.sqlite');
+
+// --- Настройка загрузки файлов ---
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, unique + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage });
+
+app.use('/uploads', express.static(uploadDir));
+
+// Эндпоинт загрузки файла
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+  res.json({ url: '/uploads/' + req.file.filename, name: req.file.originalname });
+});
 
 // --- Таблицы ---
 db.exec(`
@@ -30,6 +54,7 @@ db.exec(`
     user_id INTEGER,
     username TEXT NOT NULL,
     text TEXT NOT NULL,
+    file_url TEXT,
     time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS user_chats (
@@ -44,13 +69,20 @@ db.exec(`
   );
 `);
 
-// --- Регистрация (простая, без почты) ---
+// На случай, если таблица уже была создана без file_url
+try {
+  const columns = db.prepare("PRAGMA table_info(room_messages)").all();
+  if (!columns.some(c => c.name === 'file_url')) {
+    db.exec('ALTER TABLE room_messages ADD COLUMN file_url TEXT');
+  }
+} catch (e) { /* игнорируем */ }
+
+// --- Регистрация ---
 app.post('/api/register', (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Заполните все поля' });
   }
-
   try {
     const existing = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
     if (existing) return res.status(409).json({ error: 'Почта или имя уже заняты' });
@@ -159,11 +191,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_message', (data) => {
-    const { roomId, text } = data;
+    const { roomId, text, fileUrl } = data;
     if (!roomId || !text) return;
 
-    const info = db.prepare('INSERT INTO room_messages (room_id, user_id, username, text) VALUES (?, ?, ?, ?)').run(roomId, currentUserId, currentUsername, text);
-    const savedMsg = { id: info.lastInsertRowid, room_id: roomId, user_id: currentUserId, username: currentUsername, text, time: new Date() };
+    const info = db.prepare('INSERT INTO room_messages (room_id, user_id, username, text, file_url) VALUES (?, ?, ?, ?, ?)').run(roomId, currentUserId, currentUsername, text, fileUrl || null);
+    const savedMsg = { 
+      id: info.lastInsertRowid, 
+      room_id: roomId, 
+      user_id: currentUserId, 
+      username: currentUsername, 
+      text, 
+      file_url: fileUrl || null,
+      time: new Date() 
+    };
     io.to(`room_${roomId}`).emit('receive_message', savedMsg);
   });
 
@@ -186,4 +226,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('✅ Lingle работает (без почты, с капчей)!'));
+server.listen(PORT, () => console.log('✅ Lingle с отправкой файлов работает!'));
