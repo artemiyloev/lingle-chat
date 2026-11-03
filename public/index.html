@@ -113,6 +113,54 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+    // ===== МЕЛОДИЯ В СТИЛЕ SKYPE =====
+    let ringtoneInterval = null;
+    let audioCtx = null;
+
+    function startRingtone() {
+        if (ringtoneInterval) return;
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Функция для проигрывания одной ноты
+        function playNote(freq, startTime, duration) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.2, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + duration);
+        }
+
+        // Мелодия Skype: чередование двух нот (высокая и низкая)
+        function playSkypeTone() {
+            const now = audioCtx.currentTime;
+            // Первая пара (например, 880 Гц и 440 Гц)
+            playNote(880, now, 0.15);
+            playNote(440, now + 0.2, 0.15);
+            // Вторая пара (с небольшим сдвигом)
+            playNote(880, now + 0.4, 0.15);
+            playNote(440, now + 0.6, 0.15);
+            // Можно добавить ещё, но это уже узнаваемый ритм
+        }
+
+        // Запускаем сразу и повторяем каждые 2 секунды
+        playSkypeTone();
+        ringtoneInterval = setInterval(playSkypeTone, 2000);
+    }
+
+    function stopRingtone() {
+        if (ringtoneInterval) {
+            clearInterval(ringtoneInterval);
+            ringtoneInterval = null;
+        }
+    }
+
     // ===== ТЕМА =====
     const themeBtn = document.getElementById('theme-btn');
     function getTheme() { return localStorage.getItem('theme') || 'light'; }
@@ -146,6 +194,8 @@
     }
 
     generateCaptcha();
+    captchaBox.style.display = 'none';
+    captchaInput.style.display = 'none';
 
     authToggle.onclick = () => {
         isLoginMode = !isLoginMode;
@@ -168,10 +218,6 @@
         }
     };
 
-    // при первой загрузке (режим входа) скрываем капчу
-    captchaBox.style.display = 'none';
-    captchaInput.style.display = 'none';
-
     authBtn.onclick = async () => {
         const login = authLogin.value.trim();
         const password = authPassword.value.trim();
@@ -181,7 +227,6 @@
         if (!login || !password) { errorMsg.textContent = 'Заполните все поля!'; return; }
 
         if (isLoginMode) {
-            // Вход
             try {
                 const res = await fetch('/api/login', {
                     method: 'POST',
@@ -194,7 +239,6 @@
                 startApp();
             } catch (err) { errorMsg.textContent = err.message; }
         } else {
-            // Регистрация с проверкой капчи
             if (!username) { errorMsg.textContent = 'Придумайте имя!'; return; }
             const captcha = captchaInput.value.trim();
             if (parseInt(captcha) !== captchaAnswer) {
@@ -202,7 +246,7 @@
                 generateCaptcha();
                 return;
             }
-            const email = login; // используем введённый логин как email (или просто как идентификатор)
+            const email = login;
             try {
                 const res = await fetch('/api/register', {
                     method: 'POST',
@@ -315,7 +359,7 @@
         });
     });
 
-    // ===== ЗВОНКИ =====
+    // ===== ЗВОНКИ (с мелодией Skype) =====
     let pc = null, localStream = null, remoteSocketId = null, isCaller = false;
     const callOverlay = document.getElementById('call-overlay');
     const callStatus = document.getElementById('call-status');
@@ -331,12 +375,18 @@
             callAnswerBtn.style.display = 'inline-block';
             remoteSocketId = data.from;
             window.pendingOffer = data.offer;
+            startRingtone(); // <-- включаем мелодию Skype
         });
         socket.on('call_answered', (data) => {
+            stopRingtone(); // <-- выключаем
             pc.setRemoteDescription(data.answer).then(() => { callStatus.textContent = 'Разговор идёт...'; });
         });
         socket.on('ice_candidate', (candidate) => { if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate)); });
-        socket.on('call_ended', () => { endCall(); alert('Звонок завершён'); });
+        socket.on('call_ended', () => {
+            stopRingtone(); // <-- выключаем
+            endCall();
+            alert('Звонок завершён');
+        });
     }
 
     function initiateCall(useVideo) {
@@ -360,6 +410,7 @@
     }
 
     callAnswerBtn.onclick = () => {
+        stopRingtone(); // <-- выключаем при ответе
         callAnswerBtn.style.display = 'none';
         callStatus.textContent = 'Соединение...';
         navigator.mediaDevices.getUserMedia({ audio: true, video: true })
@@ -380,6 +431,7 @@
     document.getElementById('video-call-btn').onclick = () => initiateCall(true);
 
     function endCall() {
+        stopRingtone(); // <-- выключаем при завершении
         if (pc) { pc.close(); pc = null; }
         if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
         callOverlay.style.display = 'none';
@@ -389,4 +441,4 @@
     callEndBtn.onclick = endCall;
 </script>
 </body>
-</html>
+                </html>
