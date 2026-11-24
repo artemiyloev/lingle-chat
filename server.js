@@ -1,229 +1,280 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// ============================================================
+//  ХРАНИЛИЩЕ (вместо db.js + store.js)
+// ============================================================
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+function load(name, fallback = []) {
+  const p = path.join(DATA_DIR, `${name}.json`);
+  if (!fs.existsSync(p)) return fallback;
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; }
+}
+function save(name, data) {
+  const p = path.join(DATA_DIR, `${name}.json`);
+  const tmp = p + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, p);
+}
+
+// ---------- USERS ----------
+function getUsers() { return load('users', []); }
+
+function findUserByLogin(login) {
+  return getUsers().find(u => u.username === login);
+}
+
+function createUser(username, password) {
+  const users = getUsers();
+  if (users.some(u => u.username === username)) throw new Error('Это имя уже занято');
+  const user = {
+    id: users.length ? Math.max(...users.map(u => u.id)) + 1 : 1,
+    username,
+    password_hash: bcrypt.hashSync(password, 10),
+    created_at: new Date().toISOString()
+  };
+  users.push(user);
+  save('users', users);
+  return user;
+}
+
+function searchUsers(query, excludeId) {
+  const q = query.toLowerCase();
+  return getUsers()
+    .filter(u => u.id !== excludeId && u.username.toLowerCase().includes(q))
+    .slice(0, 20)
+    .map(({ password_hash, ...rest }) => rest);
+}
+
+// ---------- MESSAGES ----------
+function getMessages(roomId, limit = 50) {
+  return load('messages', []).filter(m => m.room_id === roomId).slice(-limit);
+}
+
+function addMessage(msg) {
+  const all = load('messages', []);
+  const id = all.length ? Math.max(...all.map(m => m.id)) + 1 : 1;
+  const record = { id, ...msg, time: new Date().toISOString() };
+  all.push(record);
+  save('messages', all);
+  return record;
+}
+
+// ---------- CHATS ----------
+function getChatsForUser(userId) {
+  return load('chats', [])
+    .filter(c => c.user_id === userId)
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+}
+
+function upsertChat({ userId, chatRoomId, targetUserId, targetUsername }) {
+  const all = load('chats', []);
+  const idx = all.findIndex(c => c.user_id === userId && c.chat_room_id === chatRoomId);
+  const now = new Date().toISOString();
+  if (idx >= 0) {
+    all[idx].updated_at = now;
+  } else {
+    all.push({
+      id: all.length ? Math.max(...all.map(c => c.id)) + 1 : 1,
+      user_id: userId,
+      chat_room_id: chatRoomId,
+      target_user_id: targetUserId,
+      target_username: targetUsername,
+      last_message: '',
+      updated_at: now
+    });
+  }
+  save('chats', all);
+}
+
+function updateLastMessage(roomId, text) {
+  const all = load('chats', []);
+  let changed = false;
+  all.forEach(c => {
+    if (c.chat_room_id === roomId) {
+      c.last_message = text.slice(0, 100);
+      c.updated_at = new Date().toISOString();
+      changed = true;
+    }
+  });
+  if (changed) save('chats', all);
+}
+
+// ============================================================
+//  СЕРВЕР
+// ============================================================
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, { cors: { origin: '*' } });
 
+app.set('trust proxy', 1);
 app.use(express.static('public'));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
-const SECRET_KEY = 'lingle_secret_2026';
-const db = new Database('db.sqlite');
+const SECRET_KEY = process.env.JWT_SECRET || 'lingle_dev_only_change_me';
 
-// --- Настройка загрузки файлов ---
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+// ---------- UPLOADS ----------
+const uploadDir = path.join(DATA_DIR, 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, unique + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /image|audio|video|pdf|text|zip|octet-stream/.test(file.mimetype);
+    cb(ok ? null : new Error('Недопустимый тип файла'), ok);
+  }
+});
 
-app.use('/uploads', express.static(uploadDir));
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+}, express.static(uploadDir));
 
-// Эндпоинт загрузки файла
-app.post('/api/upload', upload.single('file'), (req, res) => {
+// ---------- AUTH MIDDLEWARE ----------
+function auth(req, res, next) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Нет токена' });
+  try {
+    req.user = jwt.verify(token, SECRET_KEY);
+    next();
+  } catch {
+    res.status(401).json({ error: 'Невалидный токен' });
+  }
+}
+
+// ---------- AUTH ROUTES ----------
+app.post('/api/register', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'Заполните логин и пароль' });
+  if (username.length < 3) return res.status(400).json({ error: 'Логин минимум 3 символа' });
+  if (password.length < 6) return res.status(400).json({ error: 'Пароль минимум 6 символов' });
+  try {
+    const user = createUser(username, password);
+    const token = jwt.sign({ userId: user.id, username: user.username }, SECRET_KEY, { expiresIn: '7d' });
+    res.json({ token, user: { id: user.id, username: user.username } });
+  } catch (e) {
+    res.status(409).json({ error: e.message });
+  }
+});
+
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'Введите логин и пароль' });
+  const user = findUserByLogin(username);
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    return res.status(401).json({ error: 'Неверный логин или пароль' });
+  }
+  const token = jwt.sign({ userId: user.id, username: user.username }, SECRET_KEY, { expiresIn: '7d' });
+  res.json({ token, user: { id: user.id, username: user.username } });
+});
+
+// ---------- CHATS / SEARCH ----------
+app.get('/api/my-chats', auth, (req, res) => {
+  res.json(getChatsForUser(req.user.userId));
+});
+
+app.get('/api/search-users', auth, (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json([]);
+  res.json(searchUsers(q, req.user.userId));
+});
+
+// ---------- UPLOAD ----------
+app.post('/api/upload', auth, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
   res.json({ url: '/uploads/' + req.file.filename, name: req.file.originalname });
 });
 
-// --- Таблицы ---
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS room_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_id TEXT NOT NULL,
-    user_id INTEGER,
-    username TEXT NOT NULL,
-    text TEXT NOT NULL,
-    file_url TEXT,
-    time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS user_chats (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    chat_room_id TEXT NOT NULL,
-    target_user_id INTEGER NOT NULL,
-    target_username TEXT NOT NULL,
-    last_message TEXT DEFAULT '',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, chat_room_id)
-  );
-`);
-
-// На случай, если таблица уже была создана без file_url
-try {
-  const columns = db.prepare("PRAGMA table_info(room_messages)").all();
-  if (!columns.some(c => c.name === 'file_url')) {
-    db.exec('ALTER TABLE room_messages ADD COLUMN file_url TEXT');
-  }
-} catch (e) { /* игнорируем */ }
-
-// --- Регистрация ---
-app.post('/api/register', (req, res) => {
-  const { username, email, password } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({ error: 'Заполните все поля' });
-  }
-  try {
-    const existing = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
-    if (existing) return res.status(409).json({ error: 'Почта или имя уже заняты' });
-
-    const hash = bcrypt.hashSync(password, 10);
-    const info = db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)').run(username, email, hash);
-    const token = jwt.sign({ userId: info.lastInsertRowid, username }, SECRET_KEY, { expiresIn: '7d' });
-    res.json({ token, user: { id: info.lastInsertRowid, username, email } });
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка регистрации' });
-  }
-});
-
-// --- Вход ---
-app.post('/api/login', (req, res) => {
-  const { login, password } = req.body;
-  if (!login || !password) return res.status(400).json({ error: 'Введите логин/почту и пароль' });
-
-  try {
-    const user = db.prepare('SELECT id, username, email, password_hash FROM users WHERE username = ? OR email = ?').get(login, login);
-    if (!user) return res.status(401).json({ error: 'Неверный логин/почта или пароль' });
-    if (!bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Неверный логин/почта или пароль' });
-
-    const token = jwt.sign({ userId: user.id, username: user.username }, SECRET_KEY, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email } });
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка входа' });
-  }
-});
-
-// --- Список личных чатов ---
-app.get('/api/my-chats', (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Нет токена' });
-
-  try {
-    const decoded = jwt.verify(token, SECRET_KEY);
-    const chats = db.prepare('SELECT * FROM user_chats WHERE user_id = ? ORDER BY updated_at DESC').all(decoded.userId);
-    res.json(chats);
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка загрузки диалогов' });
-  }
-});
-
-// --- Поиск пользователей ---
-app.get('/api/search-users', (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Нет токена' });
-
-  try {
-    const decoded = jwt.verify(token, SECRET_KEY);
-    const query = req.query.q;
-    if (!query) return res.json([]);
-
-    const users = db.prepare(`
-      SELECT id, username, email FROM users 
-      WHERE (username LIKE ? OR email LIKE ? OR id LIKE ?) AND id != ?
-      LIMIT 20
-    `).all(`%${query}%`, `%${query}%`, `%${query}%`, decoded.userId);
-
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка поиска' });
-  }
-});
-
-// --- Сокеты ---
+// ============================================================
+//  SOCKETS
+// ============================================================
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
-  if (!token) { socket.isGuest = true; return next(); }
   try {
     const decoded = jwt.verify(token, SECRET_KEY);
     socket.userId = decoded.userId;
     socket.username = decoded.username;
     next();
-  } catch (err) {
-    socket.isGuest = true;
-    next();
+  } catch {
+    next(new Error('unauthorized'));
   }
 });
 
+const onlineUsers = new Map();
+
 io.on('connection', (socket) => {
-  const currentUserId = socket.userId;
-  const currentUsername = socket.username;
-  let currentRoomId = null;
+  const { userId, username } = socket;
+  onlineUsers.set(userId, socket.id);
+  socket.emit('your_id', userId);
 
-  socket.emit('your_id', currentUserId);
-
-  socket.on('join_room', (roomId, targetUserId, targetUsername) => {
-    if (currentRoomId) socket.leave(`room_${currentRoomId}`);
-    currentRoomId = roomId;
+  socket.on('join_room', ({ roomId, targetUserId, targetUsername }) => {
     socket.join(`room_${roomId}`);
+    socket.currentRoomId = roomId;
 
-    if (targetUserId && currentUserId) {
-      try {
-        db.prepare(`
-          INSERT INTO user_chats (user_id, chat_room_id, target_user_id, target_username) 
-          VALUES (?, ?, ?, ?)
-          ON CONFLICT(user_id, chat_room_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-        `).run(currentUserId, roomId, targetUserId, targetUsername);
-      } catch (e) {}
-    }
+    upsertChat({ userId, chatRoomId: roomId, targetUserId, targetUsername });
+    upsertChat({ userId: targetUserId, chatRoomId: roomId, targetUserId: userId, targetUsername: username });
 
-    const rows = db.prepare('SELECT * FROM room_messages WHERE room_id = ? ORDER BY time ASC LIMIT 50').all(roomId);
-    socket.emit('load_history', rows);
+    socket.emit('load_history', getMessages(roomId));
   });
 
-  socket.on('send_message', (data) => {
-    const { roomId, text, fileUrl } = data;
+  socket.on('send_message', ({ roomId, text, fileUrl }) => {
     if (!roomId || !text) return;
-
-    const info = db.prepare('INSERT INTO room_messages (room_id, user_id, username, text, file_url) VALUES (?, ?, ?, ?, ?)').run(roomId, currentUserId, currentUsername, text, fileUrl || null);
-    const savedMsg = { 
-      id: info.lastInsertRowid, 
-      room_id: roomId, 
-      user_id: currentUserId, 
-      username: currentUsername, 
-      text, 
-      file_url: fileUrl || null,
-      time: new Date() 
-    };
-    io.to(`room_${roomId}`).emit('receive_message', savedMsg);
+    const saved = addMessage({
+      room_id: roomId,
+      user_id: userId,
+      username,
+      text,
+      file_url: fileUrl || null
+    });
+    updateLastMessage(roomId, text);
+    io.to(`room_${roomId}`).emit('receive_message', saved);
   });
 
-  // --- Звонки ---
-  socket.on('call_user', (data) => {
-    socket.to(`room_${data.targetRoomId}`).emit('incoming_call', { from: socket.id, fromUsername: currentUsername, offer: data.offer });
+  // ---------- ЗВОНКИ ----------
+  socket.on('call_user', ({ targetUserId, offer, video }) => {
+    const targetSocket = onlineUsers.get(targetUserId);
+    if (!targetSocket) return socket.emit('call_failed', { reason: 'Пользователь не в сети' });
+    io.to(targetSocket).emit('incoming_call', {
+      from: socket.id,
+      fromUserId: userId,
+      fromUsername: username,
+      offer,
+      video
+    });
   });
 
-  socket.on('answer_call', (data) => {
-    io.to(data.targetId).emit('call_answered', { answer: data.answer, from: socket.id });
+  socket.on('answer_call', ({ targetSocketId, answer }) => {
+    io.to(targetSocketId).emit('call_answered', { answer, from: socket.id });
   });
 
-  socket.on('ice_candidate', (data) => {
-    io.to(data.targetId).emit('ice_candidate', data.candidate);
+  socket.on('ice_candidate', ({ targetSocketId, candidate }) => {
+    io.to(targetSocketId).emit('ice_candidate', candidate);
   });
 
-  socket.on('hangup', (data) => {
-    socket.to(`room_${data.roomId}`).emit('call_ended');
+  socket.on('hangup', ({ targetSocketId }) => {
+    if (targetSocketId) io.to(targetSocketId).emit('call_ended');
+  });
+
+  socket.on('disconnect', () => {
+    if (onlineUsers.get(userId) === socket.id) onlineUsers.delete(userId);
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('✅ Lingle с отправкой файлов работает!'));
+server.listen(PORT, () => console.log('✅ Lingle работает на порту ' + PORT));
